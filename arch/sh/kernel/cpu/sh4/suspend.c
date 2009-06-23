@@ -93,10 +93,14 @@ static int sh4_suspend_enter(suspend_state_t state)
 	return 0;
 }
 
+#ifndef CONFIG_CPU_ST40_300
 static void sleep_on_idle(void)
 {
 	asm volatile ("sleep	\n":::"memory");
 }
+#else
+#define sleep_on_idle	NULL
+#endif
 
 static ssize_t power_wokenupby_show(struct kset *subsys, char *buf)
 {
