@@ -22,6 +22,7 @@
 #include <linux/hardirq.h>
 #include <linux/jiffies.h>
 #include <asm/system.h>
+#include <asm/cpu/cacheflush.h>
 #include <asm/io.h>
 #include <asm-generic/bug.h>
 #include <asm/pm.h>
@@ -61,7 +62,10 @@ static int sh4_suspend_enter(suspend_state_t state)
 	data->l_p_j = _10_ms_lpj();
 
 	/* Must wait for serial buffers to clear */
+	printk(KERN_INFO "sh4 is sleeping...\n");
 	mdelay(500);
+
+	flush_cache_all();
 
 	local_irq_save(flags);
 
