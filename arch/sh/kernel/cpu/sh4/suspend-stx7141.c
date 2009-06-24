@@ -170,7 +170,7 @@ static unsigned long stx7141_iomem[2] __cacheline_aligned = {
 
 static int stx7141_evttoirq(unsigned long evt)
 {
-	return ((evt < 0x400) ? ilc2irq(evt) : evt2irq(evt));
+	return ((evt >= 0xa00) ? (ilc2irq(evt)-32) : evt2irq(evt));
 }
 
 static struct sh4_suspend_t st40data __cacheline_aligned = {
