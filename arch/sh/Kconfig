@@ -668,6 +668,14 @@ config SH_ST_HMP
 	  Select HMP reference board if configuring for an	
 	  HMP board
 
+# STSDK - FAE/STAPIREF_COMPAT - Add IDTV7109_7109 board support
+config SH_ST_IDTV7109    
+	bool "IDTV7109_7109 Reference board"
+	depends on CPU_SUBTYPE_STB7100
+	help
+	  Select IDTV7109_7109 Reference if configuring for an
+	  IDTV7109_7109 Reference Board.
+	  
 comment "ST Peripheral Boards"
 
 config SH_ST_DB641
