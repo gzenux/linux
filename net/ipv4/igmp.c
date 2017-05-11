@@ -2623,3 +2623,4 @@ EXPORT_SYMBOL(ip_mc_dec_group);
 EXPORT_SYMBOL(ip_mc_inc_group);
 EXPORT_SYMBOL(ip_mc_join_group);
 EXPORT_SYMBOL(ip_mc_rejoin_group);
+EXPORT_SYMBOL(ip_mc_leave_group);
