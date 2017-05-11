@@ -285,7 +285,11 @@ void __init setup_bootmem_allocator(unsigned long free_pfn)
 	ROOT_DEV = Root_RAM0;
 
 	if (LOADER_TYPE && INITRD_START) {
-		unsigned long initrd_start_phys = INITRD_START + __MEMORY_START;
+		/* STSDK - FAE/STAPIREF_COMPAT - Fix to use u-boot */
+		/* INITRD_START was originally the offset from the start of RAM */
+		/* but is redefined to be the offset from a page below the zero page */
+		unsigned long initrd_start_phys = 
+                       virt_to_phys(INITRD_START + PARAM - PAGE_SIZE);
 
 		if (initrd_start_phys + INITRD_SIZE <= PFN_PHYS(max_low_pfn)) {
 			reserve_bootmem(initrd_start_phys, INITRD_SIZE,
