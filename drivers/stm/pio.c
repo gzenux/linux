@@ -162,7 +162,8 @@ EXPORT_SYMBOL(__stpio_request_pin);
 
 void stpio_free_pin(struct stpio_pin *pin)
 {
-	stpio_configure_pin(pin, STPIO_IN);
+        /* STSDK - Don't touch the pin when freeing it */
+        /*   stpio_configure_pin(pin, STPIO_IN); */
 	pin->name = NULL;
 	pin->func = 0;
 	pin->dev  = 0;
@@ -633,6 +634,9 @@ static struct irq_chip stpio_irq_chip = {
 	.mask		= stpio_irq_chip_disable,
 	.mask_ack	= stpio_irq_chip_disable,
 	.unmask		= stpio_irq_chip_enable,
+	/* STSDK: Need this for STPIO */
+	.enable		= stpio_irq_chip_enable,
+	.disable	= stpio_irq_chip_disable,
 	.set_type	= stpio_irq_chip_type,
 };
 
