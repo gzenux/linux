@@ -28,7 +28,7 @@
 #include <asm/irl.h>
 #include "../common/common.h"
 
-static int ascs[2] __initdata = { 2, 3 };
+static int ascs[2] __initdata = { 2 };
 
 static void __init mb704_setup(char **cmdline_p)
 {
