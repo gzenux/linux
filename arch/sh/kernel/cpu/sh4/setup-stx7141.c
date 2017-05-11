@@ -29,7 +29,7 @@
 static u64 st40_dma_mask = DMA_32BIT_MASK;
 
 static struct {
-	unsigned char syscfg;
+	char syscfg;
 	unsigned char lsb, msb;
 } pio_sysconf[17][8] = {
 	{
@@ -39,19 +39,19 @@ static struct {
 		{ 19,  2,  3 },	/* PIO1[1] */
 		{ 19,  4,  5 },	/* PIO1[2] */
 		{ 19,  5,  7 },	/* PIO1[3] */
-		{ 19,  8,  8 },	/* PIO1[4] */
-		{ 19,  9,  9 },	/* PIO1[5] */
-		{ 19, 10, 10 },	/* PIO1[6] */
-		{ 19, 11, 11 },	/* PIO1[7] */
+		{ -1,  8,  8 },	/* PIO1[4] */ /* As per Sti7141 S/W Arc doc v0.5.0==>pins4-7 for ecm Tuner*/
+		{ -1,  9,  9 },	/* PIO1[5] */
+		{ -1, 10, 10 },	/* PIO1[6] */
+		{ -1, 11, 11 },	/* PIO1[7] */
 	}, {
 		{ 19, 12, 12 },	/* PIO2[0] */
 		{ 19, 13, 13 },	/* PIO2[1] */
 		{ 19, 14, 14 },	/* PIO2[2] */
-		{ 19, 15, 15 },	/* PIO2[3] */
-		{ 19, 16, 16 },	/* PIO2[4] */
-		{ 19, 17, 17 },	/* PIO2[5] */
-		{ 19, 18, 18 },	/* PIO2[6] */
-		{ 19, 19, 19 },	/* PIO2[7] */
+		{ -1, 15, 15 },	/* PIO2[3] */ /* As per Sti7141 S/W Arc doc v0.5.0==>pins3-5 for STv0130 by ecm */
+		{ -1, 16, 16 },	/* PIO2[4] */ 
+		{ -1, 17, 17 },	/* PIO2[5] */
+		{ -1, 18, 18 },	/* PIO2[6] */ /* As per Sti7141 S/W Arc doc v0.5.0==>pins6-7 for SSC2 by ecm */
+		{ -1, 19, 19 },	/* PIO2[7] */
 	}, {
 		{ 19, 20, 20 },	/* PIO3[0] */
 		{ 19, 21, 21 },	/* PIO3[1] */
@@ -64,10 +64,10 @@ static struct {
 	}, {
 		{ 20,  1,  2 },	/* PIO4[0] */
 		{ 20,  3,  4 },	/* PIO4[1] */
-		{ 20,  5,  6 },	/* PIO4[2] */
-		{ 20,  7,  8 },	/* PIO4[3] */
-		{ 20,  9, 10 },	/* PIO4[4] */
-		{ 20, 11, 12 },	/* PIO4[5] */
+		{ -1,  5,  6 },	/* PIO4[2] */ /* As per Sti7141 S/W Arc doc v0.5.0==>pins 4-7 ;USB1.1 power & OC by ecm */
+		{ -1,  7,  8 },	/* PIO4[3] */
+		{ -1,  9, 10 },	/* PIO4[4] */
+		{ -1, 11, 12 },	/* PIO4[5] */
 		{ 20, 13, 13 },	/* PIO4[6] */
 		{ 20, 14, 14 },	/* PIO4[7] */
 	}, {
@@ -80,13 +80,13 @@ static struct {
 		{ 20, 24, 24 },	/* PIO5[6] */
 		{ 20, 25, 26 },	/* PIO5[7] */
 	}, {
-		{ 20, 27, 28 },	/* PIO6[0] */
-		{ 20, 29, 30 },	/* PIO6[1] */
-		{ 25,  0,  1 },	/* PIO6[2] */
-		{ 25,  2,  3 },	/* PIO6[3] */
+		{ -1, 27, 28 },	/* PIO6[0] */ /* As per Sti7141 S/W Arc doc v0.5.0==>pins 0-3 ;OOB by ecm */
+		{ -1, 29, 30 },	/* PIO6[1] */
+		{ -1,  0,  1 },	/* PIO6[2] */
+		{ -1,  2,  3 },	/* PIO6[3] */
 		{ 25,  4,  5 },	/* PIO6[4] */
 		{ 25,  6,  7 },	/* PIO6[5] */
-		{ 25,  8,  9 },	/* PIO6[6] */
+		{ -1,  8,  9 },	/* PIO6[6] */ /* As per Sti7141 S/W Arc doc v0.5.0==>pin 6 ;OOB by ecm */
 		{ 25, 10, 11 },	/* PIO6[7] */
 	}, {
 		{ 25, 12, 13 },	/* PIO7[0] */
@@ -107,27 +107,34 @@ static struct {
 		{ 35, 15, 17 },	/* PIO8[6] */
 		{ 35, 18, 20 },	/* PIO8[7] */
 	}, {
-		{ 35, 21, 22 },	/* PIO9[0] */
-		{ 35, 23, 24 },	/* PIO9[1] */
-		{ 35, 25, 26 },	/* PIO9[2] */
-		{ 35, 27, 28 },	/* PIO9[3] */
-		{ 35, 29, 30 },	/* PIO9[4] */
-		{ 46,  0,  1 },	/* PIO9[5] */
-		{ 46,  2,  3 },	/* PIO9[6] */
-		{ 46,  4,  5 },	/* PIO9[7] */
+		{ -1, 21, 22 },	/* PIO9[0] */
+		{ -1, 23, 24 },	/* PIO9[1] */
+		{ -1, 25, 26 },	/* PIO9[2] */
+		{ -1, 27, 28 },	/* PIO9[3] */
+		{ -1, 29, 30 },	/* PIO9[4] */
+		{ -1,  0,  1 },	/* PIO9[5] */
+		{ -1,  2,  3 },	/* PIO9[6] */
+		{ -1,  4,  5 },	/* PIO9[7] */
 	}, {
+#if (defined(CONFIG_SH_ST_MB628)||defined(CONFIG_SH_ST_CUSTOM001035))
 		{ 46,  6,  7 },	/* PIO10[0] */
 		{ 46,  8,  9 },	/* PIO10[1] */
 		{ 46, 10, 11 },	/* PIO10[2] */
 		{ 46, 12, 13 },	/* PIO10[3] */
-		{ 46, 14, 15 },	/* PIO10[4] */
-		{ 46, 16, 17 },	/* PIO10[5] */
-		{ 46, 18, 19 },	/* PIO10[6] */
-		{ 46, 20, 21 },	/* PIO10[7] */
+#else
+		{ -1,  6,  7 },	/* PIO10[0] */
+		{ -1,  8,  9 },	/* PIO10[1] */
+		{ -1, 10, 11 },	/* PIO10[2] */
+		{ -1, 12, 13 },	/* PIO10[3] */
+#endif
+		{ -1, 14, 15 },	/* PIO10[4] */
+		{ -1, 16, 17 },	/* PIO10[5] */
+		{ -1, 18, 19 },	/* PIO10[6] */
+		{ -1, 20, 21 },	/* PIO10[7] */
 	}, {
-		{ 46, 22, 23 },	/* PIO11[0] */
-		{ 46, 24, 26 },	/* PIO11[1] */
-		{ 46, 27, 29 },	/* PIO11[2] */
+		{ -1, 22, 23 },	/* PIO11[0] */
+		{ -1, 24, 26 },	/* PIO11[1] */
+		{ -1, 27, 29 },	/* PIO11[2] */
 		{ 47,  0,  2 },	/* PIO11[3] */
 		{ 47,  3,  5 },	/* PIO11[4] */
 		{ 47,  6,  8 },	/* PIO11[5] */
@@ -185,11 +192,18 @@ static void stx7141_pio_sysconf(int bank, int pin, int alt, const char *name)
 {
 	struct sysconf_field *sc;
 
+    if (pio_sysconf[bank][pin].syscfg != -1) 
+	{
 	sc = sysconf_claim(SYS_CFG,
 			   pio_sysconf[bank][pin].syscfg,
 			   pio_sysconf[bank][pin].lsb,
 			   pio_sysconf[bank][pin].msb, name);
 	sysconf_write(sc, alt);
+	} 
+	else 
+	{
+	 printk(KERN_ERR "Cannot claim PIO bank %d pin %d\n", bank,pin);
+	}
 }
 
 /* USB resources ----------------------------------------------------------- */
@@ -623,7 +637,11 @@ void stx7141_configure_ethernet(int port, int reverse_mii, int mode,
 	} mii_pins[] = {
 		{ { {  8, 0, 1 }, { 11, 4, 1 } }, STPIO_IN  },	/* TXCLK */
 		{ { {  8, 1, 1 }, { 11, 5, 1 } }, STPIO_OUT },	/* TXEN */
+/* STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001034/CUSTOM001035 support */
+#if (defined(CONFIG_SH_ST_CUSTOM001034)||defined(CONFIG_SH_ST_CUSTOM001035))
+#else
 		{ { {  8, 2, 1 }, { 11, 6, 1 } }, STPIO_OUT },	/* TXER */
+#endif
 		{ { {  8, 3, 1 }, { 11, 7, 1 } }, STPIO_OUT },	/* TXD[0] */
 		{ { {  8, 4, 1 }, { 12, 0, 1 } }, STPIO_OUT },	/* TXD[1] */
 		{ { {  8, 5, 1 }, { 12, 1, 1 } }, STPIO_OUT },	/* TXD[2] */
@@ -648,7 +666,11 @@ void stx7141_configure_ethernet(int port, int reverse_mii, int mode,
 		{ { { 11, 0, 1 }, { 14, 4, 1 } }, STPIO_OUT },	/* MDC */
 		{ { { 11, 1, 1 }, { 14, 5, 1 } }, STPIO_BIDIR },/* MDIO */
 		{ { { 11, 2, 1 }, { 14, 6, 1 } }, STPIO_IN  },	/* MDINT */
+/* STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001034/CUSTOM001035 support */
+#if (defined(CONFIG_SH_ST_CUSTOM001034)||defined(CONFIG_SH_ST_CUSTOM001035))
+#else
 		{ { { 11, 3, 1 }, { 14, 7, 1 } }, STPIO_OUT },	/* PHYCLK */
+#endif
 	};
 
 	stx7141eth_private_data[port].bus_id = phy_bus;
@@ -1195,8 +1217,12 @@ static struct platform_device stpio_devices[] = {
 	STPIO_DEVICE(7, 0xfd026000, ILC_IRQ(55)),
 
 	STPIO_DEVICE(8, 0xfe010000, ILC_IRQ(59)),
-	STPIO_DEVICE(9, 0xfe011000, ILC_IRQ(60)),
+	/*STPIO_DEVICE(9, 0xfe011000, ILC_IRQ(60)),*/
+#if (defined(CONFIG_SH_ST_MB628)||defined(CONFIG_SH_ST_CUSTOM001035))
 	STPIO_DEVICE(10, 0xfe012000, ILC_IRQ(61)),
+#else
+	/*STPIO_DEVICE(10, 0xfe012000, ILC_IRQ(61)),*/
+#endif
 	STPIO_DEVICE(11, 0xfe013000, ILC_IRQ(62)),
 	STPIO_DEVICE(12, 0xfe014000, ILC_IRQ(63)),
 	STPIO_DEVICE(13, 0xfe015000, ILC_IRQ(64)),

@@ -43,7 +43,7 @@ static struct platform_device epld_device;
 
 static int ascs[] __initdata = {
 	1 | (ASC1_PIO10 << 8),	/* PIO10 muxed with GMAC0 & DVO */
-	2 | (ASC2_PIO6  << 8)	/* PIO6 muxed with TS(NIM) and OOB_??? */
+/*	2 | (ASC2_PIO6  << 8)*/	/* PIO6 muxed with TS(NIM) and OOB_??? */
 };
 
 static void __init mb628_setup(char **cmdline_p)
@@ -103,8 +103,8 @@ static void spi_chipselect_ssc2(void *_spi, int value)
 static struct plat_ssc_data ssc_private_info = {
 	.capability  =
 		ssc0_has(SSC_SPI_CAPABILITY)	/* SSC1 */	|
-		ssc1_has(SSC_SPI_CAPABILITY)	/* SSC2 */	|
-		ssc2_has(SSC_I2C_CAPABILITY)	/* SSC3 */	|
+		ssc1_has(SSC_UNCONFIGURED)	    /* SSC2 */	| /* As per Sti7141 S/W Arc doc v0.5.0==>SSC1 by STV0130--ecm */
+		ssc2_has(SSC_UNCONFIGURED)	    /* SSC3 */	| /* As per Sti7141 S/W Arc doc v0.5.0==>SSC2 by tuner0--ecm  */
 		ssc3_has(SSC_I2C_CAPABILITY)	/* SSC4 */	|
 		ssc4_has(SSC_I2C_CAPABILITY)	/* SSC5 */	|
 		ssc5_has(SSC_I2C_CAPABILITY)	/* SSC6 */	|
@@ -462,11 +462,19 @@ static int __init device_init(void)
 	stx7141_configure_usb(0);
 
 	/* This requires fitting jumpers J52A 1-2 and J52B 4-5 */
-	stx7141_configure_usb(1);
+	/* stx7141_configure_usb(1); */
 
 	if (cpu_data->cut_major > 1) {
-		stx7141_configure_usb(2);
-		stx7141_configure_usb(3);
+
+		/* Moved this under cut2 or more since on cut1 OC protection was disabled */
+		/* and it was causing tuner failure problem on cut1,                      */
+		/* therefore, we used to comment this cut1 in IP partition patch          */
+		/* This requires fitting jumpers J52A 1-2 and J52B 4-5                    */
+		stx7141_configure_usb(1); 
+		
+		/*As per Sti7141 S/W Arc doc v0.5.0==>both USB1.1 given to eCM*/
+		/* stx7141_configure_usb(2); */
+		/* stx7141_configure_usb(3); */
 
 		stx7141_configure_sata();
 	}
