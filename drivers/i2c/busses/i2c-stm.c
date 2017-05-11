@@ -211,6 +211,9 @@ struct iic_ssc {
 #define jump_on_fsm_abort(x)	{ (x)->state = IIC_FSM_ABORT;    \
                                   goto be_fsm_abort;	}
 
+#define jump_on_fsm_complete(x)	{ (x)->state = IIC_FSM_STOP;    \
+				     goto be_fsm_complete; }
+
 #define check_fastmode(adap)	(((adap)->config & \
                                  IIC_STM_CONFIG_SPEED_MASK ) ? 1 : 0 )
 
@@ -220,6 +223,19 @@ struct iic_ssc {
 #define set_ready_fastmode(adap) ((adap)->config |= IIC_STM_READY_SPEED_FAST)
 
 #define clear_ready_fastmode(adap) ((adap)->config &= ~IIC_STM_READY_SPEED_FAST)
+
+#if defined(CONFIG_I2C_STM_NOSTOP_API)
+#define LAST_I2C_WAS_NO_STOP		0x4
+#define LAST_I2C_WAS_NO_STOP_MASK	0x4
+#define check_lasti2cwas_nostop(adap)	(((adap)->config & \
+					LAST_I2C_WAS_NO_STOP_MASK) ? 1 : 0 )
+#define set_lasti2cwas_nostop(adap)	((adap)->config |=  LAST_I2C_WAS_NO_STOP)
+#define clear_lasti2cwas_nostop(adap)	((adap)->config &= ~LAST_I2C_WAS_NO_STOP_MASK)
+#else
+#define check_lasti2cwas_nostop(adap)	(1==0)
+#define set_lasti2cwas_nostop(adap)	{}
+#define clear_lasti2cwas_nostop(adap)	{}
+#endif
 
 static void iic_stm_setup_timing(struct iic_ssc *adap, unsigned long rate);
 
@@ -288,6 +304,21 @@ static irqreturn_t iic_state_machine(int this_irq, void *data)
 	switch (trsc->state) {
 	case IIC_FSM_PREPARE:
 		dbg_print2("-Prepare\n");
+		if (check_lasti2cwas_nostop(adap)) {
+			clear_lasti2cwas_nostop(adap);
+			/* repstart */
+			dbg_print2(" STOP - REPSTART\n");
+			trsc->next_state = IIC_FSM_REPSTART_ADDR;
+			ssc_store32(adap, SSC_I2C,
+				    SSC_I2C_I2CM |
+				    SSC_I2C_TXENB |
+				    SSC_I2C_REPSTRTG);
+			ssc_store32(adap, SSC_IEN,
+				    SSC_IEN_REPSTRTEN |
+				    SSC_IEN_ARBLEN);
+			break;
+		}
+
 		/*
 		 * check if the i2c timing register
 		 * of ssc are ready to use
@@ -565,7 +596,15 @@ be_fsm_stop:
 			}
 		} else {
 			/* stop */
+			if (pmsg->flags & I2C_M_NOSTOP &&
+				!(status & SSC_STA_NACK)) {
+				dbg_print2(" STOP - NOSTOP\n");
+				set_lasti2cwas_nostop(adap);
+				jump_on_fsm_complete(trsc);
+			}
 			dbg_print2(" STOP - STOP\n");
+			clear_lasti2cwas_nostop(adap);
+
 			trsc->next_state = IIC_FSM_COMPLETE;
 			ssc_store32(adap, SSC_I2C,
 				    SSC_I2C_I2CM | SSC_I2C_TXENB |
@@ -577,6 +616,7 @@ be_fsm_stop:
 		break;
 
 	case IIC_FSM_COMPLETE:
+be_fsm_complete:
 		dbg_print2("-Complete\n");
 
 		if (!(trsc->status_error & IIC_E_NOTACK))
@@ -647,6 +687,11 @@ static int iic_wait_free_bus(struct iic_ssc *adap)
 	unsigned int idx;
 
 	dbg_print("\n");
+
+	if (check_lasti2cwas_nostop(adap)){
+		dbg_print("i2c-stm: wait_free_bus last transaction nostop.\n");
+		return 1;
+	}
 
 	iic_ssc_reset(adap);
 
@@ -794,6 +839,7 @@ iic_xfer_retry:
 		if (((transaction.status_error & IIC_E_NOTACK)
 		     && transaction.start_state == IIC_FSM_START)
 		    || (transaction.status_error & IIC_E_BUSY)) {
+			clear_lasti2cwas_nostop(adap);
 			if (++transaction.attempt <= adap->adapter.retries) {
 				dbg_print2("RETRYING operation\n");
 				/* error on the address - automatically retry */
@@ -832,6 +878,7 @@ iic_xfer_retry:
 				/* Last ditch effort */
 				iic_pio_stop(adap);
 			}
+			clear_lasti2cwas_nostop(adap);
 
 			if (++transaction.attempt <= adap->adapter.retries) {
 				dbg_print2("RETRYING operation\n");
@@ -879,6 +926,7 @@ iic_xfer_retry:
 				} else {
 					local_irq_restore(flag);
 				}
+				clear_lasti2cwas_nostop(adap);
 			} else
 				local_irq_restore(flag);
 

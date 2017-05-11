@@ -45,6 +45,18 @@
 	do {} while (0)
 #endif /* DEBUG */
 
+#ifdef CONFIG_I2C_STM_NOSTOP_API
+#define LAST_I2C_WAS_NO_STOP		0x1
+#define check_lasti2cwas_nostop(adap)	(((adap)->config & \
+						LAST_I2C_WAS_NO_STOP) ? 1 : 0)
+#define set_lasti2cwas_nostop(adap)	((adap)->config |=  LAST_I2C_WAS_NO_STOP)
+#define clear_lasti2cwas_nostop(adap)   ((adap)->config &= ~LAST_I2C_WAS_NO_STOP)
+#else
+#define check_lasti2cwas_nostop(adap)	(1==0)
+#define set_lasti2cwas_nostop(adap)	{}
+#define clear_lasti2cwas_nostop(adap)	{}
+#endif
+
 /* ----- global variables ---------------------------------------------	*/
 
 static int bit_test;	/* see if the line-setting functions work	*/
@@ -148,6 +160,7 @@ static void i2c_stop(struct i2c_algo_bit_data *adap)
 	sclhi(adap); 
 	setsda(adap, 1);
 	udelay(adap->udelay);
+	clear_lasti2cwas_nostop(adap);
 }
 
 
@@ -492,14 +505,21 @@ static int bit_doAddress(struct i2c_adapter *i2c_adap, struct i2c_msg *msg)
 static int bit_xfer(struct i2c_adapter *i2c_adap,
 		    struct i2c_msg msgs[], int num)
 {
-	struct i2c_msg *pmsg;
+	struct i2c_msg *pmsg = NULL;
 	struct i2c_algo_bit_data *adap = i2c_adap->algo_data;
 	
 	int i,ret;
 	unsigned short nak_ok;
 
-	bit_dbg(3, &i2c_adap->dev, "emitting start condition\n");
-	i2c_start(adap);
+	if(check_lasti2cwas_nostop(adap)){
+		bit_dbg(3, &i2c_adap->dev, "emitting repstart condition\n");
+		clear_lasti2cwas_nostop(adap);
+		i2c_repstart(adap);
+	} else {
+		bit_dbg(3, &i2c_adap->dev, "emitting start condition\n");
+		i2c_start(adap);
+	}
+
 	for (i=0;i<num;i++) {
 		pmsg = &msgs[i];
 		nak_ok = pmsg->flags & I2C_M_IGNORE_NAK; 
@@ -544,8 +564,10 @@ static int bit_xfer(struct i2c_adapter *i2c_adap,
 	ret = i;
 
 bailout:
-	bit_dbg(3, &i2c_adap->dev, "emitting stop condition\n");
-	i2c_stop(adap);
+	if (!((pmsg->flags & I2C_M_NOSTOP) && ret>=0)){
+		bit_dbg(3, &i2c_adap->dev, "emitting stop condition\n");
+		i2c_stop(adap);
+	}
 	return ret;
 }
 

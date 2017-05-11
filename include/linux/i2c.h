@@ -452,6 +452,7 @@ struct i2c_msg {
 	__u16 flags;
 #define I2C_M_RD		0x0001
 #define I2C_M_TEN		0x0010 /* we have a ten bit chip address */
+#define I2C_M_NOSTOP		0x0200 /* disables stop at the end of a transaction */
 #define I2C_M_RECV_LEN		0x0400 /* length will be first received byte */
 #define I2C_M_NO_RD_ACK		0x0800
 #define I2C_M_IGNORE_NAK	0x1000
