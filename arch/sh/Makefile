@@ -151,6 +151,8 @@ machdir-$(CONFIG_SH_ST_MB680)			+= st/mb680 st/common
 machdir-$(CONFIG_SH_ST_MB704)			+= st/mb704
 machdir-$(CONFIG_SH_ST_PDK7105)			+= st/pdk7105
 machdir-$(CONFIG_SH_ST_MB839)			+= st/mb839
+# STSDK - FAE/STAPIREF_COMPAT - Add HMP board configuration
+machdir-$(CONFIG_SH_ST_HMP)			    += st/hmp
 
 incdir-y	:= $(notdir $(firstword $(machdir-y)))
 

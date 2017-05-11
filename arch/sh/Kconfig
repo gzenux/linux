@@ -652,6 +652,14 @@ config SH_ST_MB839
 	  Select MB839 if configuring for an
 	  STMicroelectronics STi7105 MB839 Reference Board.
 
+# STSDK - FAE/STAPIREF_COMPAT - Add HMP board support
+config SH_ST_HMP
+	bool "HMP: STx7109 Reference board"
+	depends on CPU_SUBTYPE_STB7100
+	help
+	  Select HMP reference board if configuring for an	
+	  HMP board
+
 comment "ST Peripheral Boards"
 
 config SH_ST_DB641
