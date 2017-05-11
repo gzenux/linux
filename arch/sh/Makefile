@@ -161,6 +161,12 @@ machdir-$(CONFIG_SH_ST_IDTV7109)		+= st/idtv7109
 machdir-$(CONFIG_SH_MTV7109_7109)		+= st/mtv7109
 # STSDK - FAE/STAPIREF_COMPAT - Add MB628E board configuration
 machdir-$(CONFIG_SH_ST_MB628E)			+= st/mb628e st/common
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001019 board configuration
+machdir-$(CONFIG_SH_ST_CUSTOM001019)   += st/custom001019
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001034 board configuration
+machdir-$(CONFIG_SH_ST_CUSTOM001034)  	+= st/custom001034
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001035 board configuration
+machdir-$(CONFIG_SH_ST_CUSTOM001035)  	+= st/custom001035
 
 incdir-y	:= $(notdir $(firstword $(machdir-y)))
 

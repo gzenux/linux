@@ -622,6 +622,33 @@ config SH_ST_MB628E
 	  STi7141-MBOARD, ST board ID: mb628e). More information at:
 	  <http://www.stlinux.com/boards/mb628e/>
 
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001019 support
+config SH_ST_CUSTOM001019
+	bool "custom001019: STx7109 board"
+	depends on CPU_SUBTYPE_STB7100
+	help
+	  Select CUSTOM001019 Board
+
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001034 support
+config SH_ST_CUSTOM001034
+	bool "custom001034: STx7141 board"
+	depends on CPU_SUBTYPE_STX7141
+	help
+	  Select STx7141 Mboard if configuring for an
+	  STMicroelectronics STx7141 MBoard (product code:
+	  STi7141-MBOARD, ST board ID: custom001034). More information at:
+	  <http://www.stlinux.com/boards/mb628/>
+
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001035 support
+config SH_ST_CUSTOM001035
+	bool "custom001035: STx7141 board"
+	depends on CPU_SUBTYPE_STX7141
+	help
+	  Select STx7141 Mboard if configuring for an
+	  STMicroelectronics STx7141 MBoard (product code:
+	  STi7141-MBOARD, ST board ID: custom001035). More information at:
+	  <http://www.stlinux.com/boards/mb628/>
+
 config SH_ST_MB671
 	bool "mb671: STx7200 cut 2.0 Mboard"
 	depends on CPU_SUBTYPE_STX7200

@@ -22,6 +22,12 @@ obj-$(CONFIG_SH_ST_MB411)		+= leds-mb411.o
 obj-$(CONFIG_SH_ST_MB628)		+= leds-mb628.o
 # STSDK - FAE/STAPIREF_COMPAT - Add MB628E board configuration
 obj-$(CONFIG_SH_ST_MB628E)		+= leds-mb628.o
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001019 board configuration
+obj-$(CONFIG_SH_ST_CUSTOM001019) += leds-custom001019.o
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001034 board configuration
+obj-$(CONFIG_SH_ST_CUSTOM001034) += leds-custom001034.o
+# STSDK - FAE/STAPIREF_COMPAT - Add CUSTOM001035 board configuration
+obj-$(CONFIG_SH_ST_CUSTOM001035) += leds-custom001035.o
 
 # LED Triggers
 obj-$(CONFIG_LEDS_TRIGGER_TIMER)	+= ledtrig-timer.o
