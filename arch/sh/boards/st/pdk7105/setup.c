@@ -115,10 +115,14 @@ static struct stpio_pin *phy_reset_pin;
 
 static int pdk7105_phy_reset(void* bus)
 {
+/*add by smit*/
+#if 1
+	stpio_set_pin(phy_reset_pin, 1);
+#else
 	stpio_set_pin(phy_reset_pin, 0);
 	udelay(100);
 	stpio_set_pin(phy_reset_pin, 1);
-
+#endif
 	return 1;
 }
 
@@ -148,6 +152,8 @@ static struct platform_device pdk7105_phy_device = {
 	}
 };
 
+/*add by smit*/
+#if 0
 static struct mtd_partition mtd_parts_table[3] = {
 	{
 		.name = "Boot firmware",
@@ -163,6 +169,23 @@ static struct mtd_partition mtd_parts_table[3] = {
 		.offset = 0x00240000,
 	}
 };
+#else
+static struct mtd_partition mtd_parts_table[3] = {
+	{
+		.name = "Boot firmware",
+		.size = 0x000c0000,
+		.offset = 0x00000000,
+	}, {
+		.name = "Kernel",
+		.size = 0x00300000,
+		.offset = 0x000c0000,
+	}, {
+		.name = "Root FS",
+		.size = 0x03c40000,
+		.offset = 0x003c0000,
+	}
+};
+#endif
 
 static struct physmap_flash_data pdk7105_physmap_flash_data = {
 	.width		= 2,
@@ -233,6 +256,30 @@ static struct platform_device spi_pio_device[] = {
 };
 /* Configuration for NAND Flash */
 static struct mtd_partition nand_parts[] = {
+/*add by smit*/
+/*
+ *   0M --   1M   1M  Reserved
+ *   1M --   5M   4M  KERNEL
+ *   5M -- 155M 150M  FS
+ * 155M -- 255M 100M  push update FS
+ */
+#if 1
+	{
+		.name	= "NAND kernel",
+		.offset	= 0x00100000,
+		.size 	= 0x00400000
+	}, {
+		.name	= "NAND Root",
+		.offset	= 0x00500000,
+		//.size	= 150M
+		.size	= 0x09600000
+	}, {
+		.name	= "NAND Push",
+		.offset	= 0x9b00000,
+		//.size	= 100M
+		.size	= 0x06400000
+	},
+#else
 	{
 		.name   = "NAND root",
 		.offset = 0,
@@ -242,6 +289,7 @@ static struct mtd_partition nand_parts[] = {
 		.offset = MTDPART_OFS_APPEND,
 		.size   = MTDPART_SIZ_FULL
 	},
+#endif
 };
 
 static struct plat_stmnand_data nand_config = {
@@ -272,8 +320,6 @@ STM_NAND_DEVICE("stm-nand-flex", 2, &nand_config,
 
 
 static struct platform_device *pdk7105_devices[] __initdata = {
-	&pdk7105_physmap_flash,
-	&pdk7105_leds,
 	&pdk7105_phy_device,
 	&spi_pio_device[0],
 };
@@ -311,23 +357,35 @@ static int __init device_init(void)
 	u32 bank1_start;
 	u32 bank2_start;
 	struct sysconf_field *sc;
-	u32 boot_mode;
+	u32 boot_mode,i;
 
-	bank1_start = emi_bank_base(1);
-	bank2_start = emi_bank_base(2);
+	bank1_start = emi_bank_base(0);
+	bank2_start = emi_bank_base(1);
 
 	/* Configure FLASH according to boot device mode pins */
 	sc = sysconf_claim(SYS_STA, 1, 15, 16, "boot_mode");
 	boot_mode = sysconf_read(sc);
 	if (boot_mode == 0x0)
+	{
 		/* Default configuration */
 		pr_info("Configuring FLASH for boot-from-NOR\n");
-	else if (boot_mode == 0x1) {
+	}
+	else if (boot_mode == 0x1)
+	{
 		/* Swap NOR/NAND banks */
 		pr_info("Configuring FLASH for boot-from-NAND\n");
 		pdk7105_physmap_flash.resource[0].start = bank1_start;
 		pdk7105_physmap_flash.resource[0].end = bank2_start - 1;
 		nand_device.id = 0;
+	}
+	else
+	{
+		pr_info("Configuring FLASH for boot-from-spi: boot_mode=%d\n",boot_mode);
+		bank1_start = emi_bank_base(1);
+		bank2_start = emi_bank_base(2);
+		pdk7105_physmap_flash.resource[0].start = bank1_start;
+		pdk7105_physmap_flash.resource[0].end = bank2_start - 1;
+		nand_device.id = 0; /*If your board is 2.0version,set id to 0*/
 	}
 
 	stx7105_configure_pci(&pci_config);
@@ -347,12 +405,24 @@ static int __init device_init(void)
 	 */
 
 	stx7105_configure_usb(0, &usb_init[0]);
-	stx7105_configure_usb(1, &usb_init[1]);
 
 	phy_reset_pin = stpio_request_set_pin(15, 5, "eth_phy_reset",
 					      STPIO_OUT, 1);
+
+	/* gongjia add set pio15_5 to 1 smit*/
+#if 1
+	stpio_set_pin(phy_reset_pin, 0);
+	for(i=0;i<5;i++)
+	{
+		udelay(20000);
+	}
+	stpio_set_pin(phy_reset_pin, 1);
+#endif
+
 	stx7105_configure_ethernet(0, 0, 0, 0, 0, 0);
+#if defined(CONFIG_LIRC_SUPPORT)
 	stx7105_configure_lirc(&lirc_scd);
+#endif
 	stx7105_configure_audio_pins(3, 1, 1);
 
 	/*
@@ -362,7 +432,6 @@ static int __init device_init(void)
 	stpio_request_set_pin(6, 4, "FLASH_WP", STPIO_OUT, 1);
 
 	stx7105_configure_nand(&nand_device);
-	spi_register_board_info(spi_serialflash, ARRAY_SIZE(spi_serialflash));
 
 	return platform_add_devices(pdk7105_devices, ARRAY_SIZE(pdk7105_devices));
 }

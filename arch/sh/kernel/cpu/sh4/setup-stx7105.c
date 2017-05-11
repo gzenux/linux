@@ -121,6 +121,20 @@ void __init stx7105_configure_usb(int port, struct usb_init_data *data)
 	static struct stpio_pin *pin;
 	struct sysconf_field *sc;
 
+/* add by wgzhu smit */
+#if 1
+	if (data == NULL) {
+		struct usb_init_data data1  = {
+			.oc_en = 1,
+			.oc_actlow = 0,
+			.oc_pinsel = 0,
+			.pwr_en = 1,
+			.pwr_pinsel = 0,
+		};
+		data = &data1;
+	}
+#endif
+
 	/* USB PHY clock from alternate pad? */
 	/* sysconf_claim(SYS_CFG, 40, 2,2, "USB"); */
 
@@ -175,14 +189,16 @@ void __init stx7105_configure_usb(int port, struct usb_init_data *data)
 		int pwr_portno = pwr_pio[port][data->pwr_pinsel].portno;
 		int pwr_pinno  = pwr_pio[port][data->pwr_pinsel].pinno;
 		int pwr_alt = pwr_pio[port][data->pwr_pinsel].alt;
-
-		stx7105_pio_sysconf(pwr_portno, pwr_pinno, pwr_alt, "USBPWR");
-		pin = stpio_request_pin(pwr_portno, pwr_pinno, "USBPWR", STPIO_ALT_OUT);
 	}
 
 	platform_device_register(&usb_device[port]);
 
 }
+
+/*add by smit*/
+#if 1
+EXPORT_SYMBOL(stx7105_configure_usb);
+#endif
 
 /* FDMA resources ---------------------------------------------------------- */
 
