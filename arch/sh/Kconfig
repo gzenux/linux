@@ -587,6 +587,14 @@ config SH_ST_MB618
 	  STB7111-MBOARD, ST board ID: mb618). More information at:
 	  <http://www.stlinux.com/boards/mb618/>
 
+# STSDK - FAE/STAPIREF_COMPAT - Add SAT7111 board configuration
+config SH_ST_SAT7111
+	bool "SAT7111: STi7111SAT Reference board"
+	depends on CPU_SUBTYPE_STX7111
+	help
+	  Select STi7111SAT Reference if configuring for an
+	  STMicroelectronics STi7111SAT Reference.
+
 config SH_ST_MB628
 	bool "mb628: STx7141 Mboard"
 	depends on CPU_SUBTYPE_STX7141
