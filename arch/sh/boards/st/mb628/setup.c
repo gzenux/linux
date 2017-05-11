@@ -93,6 +93,13 @@ static void spi_chipselect_ssc1(void *_spi, int value)
 	}
 }
 
+/* Chip-select for SSC2-SPI bus.  IFE is only device on this bus */
+static void spi_chipselect_ssc2(void *_spi, int value)
+{
+	/* Dummy function */
+	return;
+}
+
 static struct plat_ssc_data ssc_private_info = {
 	.capability  =
 		ssc0_has(SSC_SPI_CAPABILITY)	/* SSC1 */	|
@@ -104,6 +111,7 @@ static struct plat_ssc_data ssc_private_info = {
 		ssc6_has(SSC_I2C_CAPABILITY),	/* SSC7 */
 	.spi_chipselects = {
 		[0] = spi_chipselect_ssc1,
+		[1] = spi_chipselect_ssc2,
 	},
 };
 
@@ -140,6 +148,18 @@ static struct spi_board_info spi_serialflash[] =  {
 	},
 };
 
+static unsigned int spi_ife_data = 0;
+
+static struct spi_board_info spi_ife[] =  {
+   {
+       .modalias   = "spidev",
+       .bus_num    = 1,
+       .chip_select    = 1,
+       .max_speed_hz   = 100000,
+       .platform_data  = &spi_ife_data,
+       .mode       = SPI_MODE_3,
+   },
+};
 
 #ifdef FLASH_NOR
 /* J69 must be in position 2-3 to enable the on-board Flash devices (both
@@ -536,6 +556,7 @@ static int __init device_init(void)
 	}
 #endif
 	spi_register_board_info(spi_serialflash, ARRAY_SIZE(spi_serialflash));
+	spi_register_board_info(spi_ife, ARRAY_SIZE(spi_ife));
 
 	return platform_add_devices(mb628_devices, ARRAY_SIZE(mb628_devices));
 }
