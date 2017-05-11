@@ -297,7 +297,11 @@ static char i2c_st[] = "i2c_st";
 static char spi_st[] = "spi_st_ssc";
 static struct platform_device stssc_devices[] = {
 	STSSC_DEVICE(0x18040000, 119, 2, 0, 1, 2),
+#ifndef CONFIG_SH_MTV7109_7109
 	STSSC_DEVICE(0x18041000, 118, 3, 0, 1, 2),
+#else
+	STSSC_DEVICE(0x18041000, 118, 0xff, 0xff, 0xff, 0xff),
+#endif
 	STSSC_DEVICE(0x18042000, 117, 4, 0, 1, 0xff),
 };
 
@@ -691,7 +695,11 @@ static struct platform_device stm_stasc_devices[] = {
 		STPIO_ALT_OUT, STPIO_IN, STPIO_IN, STPIO_ALT_OUT), /* oe pin: 6 */
 	STASC_DEVICE(0x18032000, 121, -1, -1, 4, 3, 2, 4, 5,
 		STPIO_ALT_OUT, STPIO_IN, STPIO_IN, STPIO_ALT_OUT),
+#if defined CONFIG_SH_MTV7109_7109 
+	STASC_DEVICE(0x18033000, 120, -1, -1, 5, 0, 1, -1, -1,
+#else
 	STASC_DEVICE(0x18033000, 120, -1, -1, 5, 0, 1, 2, 3,
+#endif
 		STPIO_ALT_OUT, STPIO_IN, STPIO_IN, STPIO_ALT_OUT),
 };
 

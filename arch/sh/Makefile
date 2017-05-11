@@ -157,6 +157,8 @@ machdir-$(CONFIG_SH_ST_HMP)			    += st/hmp
 machdir-$(CONFIG_SH_ST_SAT7111)			+= st/sat7111 st/common
 # STSDK - FAE/STAPIREF_COMPAT - Add IDTV7109 board configuration
 machdir-$(CONFIG_SH_ST_IDTV7109)		+= st/idtv7109
+# STSDK - FAE/STAPIREF_COMPAT - Add MTV7109 board configuration
+machdir-$(CONFIG_SH_MTV7109_7109)		+= st/mtv7109
 
 incdir-y	:= $(notdir $(firstword $(machdir-y)))
 

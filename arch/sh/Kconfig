@@ -676,6 +676,14 @@ config SH_ST_IDTV7109
 	  Select IDTV7109_7109 Reference if configuring for an
 	  IDTV7109_7109 Reference Board.
 	  
+# STSDK - FAE/STAPIREF_COMPAT - Add MTV7109_7109 board support
+config SH_MTV7109_7109    
+	bool "MTV7109_7109 Reference board"
+	depends on CPU_SUBTYPE_STB7100
+	help
+	  Select MTV7109_7109 Reference if configuring for an
+	  MTV7109_7109 Reference Board.
+
 comment "ST Peripheral Boards"
 
 config SH_ST_DB641
