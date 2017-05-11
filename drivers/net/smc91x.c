@@ -1080,6 +1080,59 @@ static void smc_phy_powerdown(struct net_device *dev)
 }
 
 /*
+ * smc_phy_powerup - powerup phy
+ * @dev: net device
+ *
+ * Restore the device in normal power mode.
+ */
+static void smc_phy_powerup(struct net_device *dev)
+{
+	struct smc_local *lp = netdev_priv(dev);
+	unsigned int bmcr;
+	int phy = lp->mii.phy_id;
+	void __iomem *ioaddr = lp->base;
+
+	if (lp->phy_type == 0)
+		return;
+
+	bmcr = smc_phy_read(dev, phy, MII_BMCR);
+	DBG(2, "smc_phy_powerup: PHY Ctrl Reg: 0x%x\n", bmcr);
+
+	/* Write the PDN bit in PHY MI register 0 */
+	bmcr &= ~BMCR_PDOWN;
+	smc_phy_write(dev, phy, MII_BMCR, bmcr);
+
+	/* PHY should be in isolation mode */
+	while (!(bmcr = smc_phy_read(dev, phy, MII_BMCR) & BMCR_ISOLATE)){}
+
+	/* Clear MII_DIS bit.*/
+	bmcr &= ~BMCR_ISOLATE;
+	smc_phy_write(dev, phy, MII_BMCR, bmcr);
+
+	/* Wait 500ms for the PHY in order to restore normal operation mode */
+	msleep(500);
+
+	/* Reconfigure the device caps */
+	SMC_SELECT_BANK(0);
+	SMC_SET_RPC(lp->rpc_cur_mode);
+
+	if (lp->mii.force_media) {
+		smc_phy_fixed(dev);
+		goto smc_phy_powerup_exit;
+	}
+
+	smc_phy_read(dev, phy, MII_ADVERTISE);
+
+	bmcr |= (BMCR_ANENABLE | BMCR_ANRESTART);
+	smc_phy_write(dev, phy, MII_BMCR, bmcr);
+
+smc_phy_powerup_exit:
+	SMC_SELECT_BANK(2);
+	lp->work_pending = 0;
+	return;
+}
+
+/*
  * smc_phy_check_media - check the media status and adjust TCR
  * @dev: net device
  * @init: set true for initialisation
@@ -1740,6 +1793,140 @@ static void smc_ethtool_setmsglevel(struct net_device *dev, u32 level)
 	lp->msg_enable = level;
 }
 
+static int smc_ethtool_get_eeprom_len(struct net_device *dev)
+{
+	return EEPROM_SIZE;
+}
+
+static int smc_eeprom_rw(struct net_device *dev, int offset, u16* val,
+			 int write)
+{
+	struct smc_local *lp = netdev_priv(dev);
+	unsigned long endtime;
+	unsigned long ioaddr = dev->base_addr;
+	int res = 0;
+	unsigned int ctl;
+	unsigned int cmd = write ? CTL_STORE : CTL_RELOAD;
+
+	spin_lock_irq(&lp->lock);
+
+	/* We want RELOAD operations to affect the GP */
+	SMC_SELECT_BANK(1);
+	ctl = SMC_GET_CTL();
+	SMC_SET_CTL(ctl | CTL_EEPROM_SELECT);
+
+	/* Set the address */
+	SMC_SELECT_BANK(2);
+	SMC_SET_PTR(offset);
+
+	SMC_SELECT_BANK(1);
+
+	if (write) {
+		SMC_outw(*val, ioaddr, GP_REG);
+	}
+
+	/* Trigger read or write */
+	SMC_SET_CTL(ctl | CTL_EEPROM_SELECT | cmd);
+
+	/* Wait for completion of read or write */
+	endtime = jiffies + (HZ/10);
+	do {
+		if (time_after(jiffies, endtime)) {
+			printk(KERN_WARNING "%s: Failed to read EEPROM\n", dev->name);
+			res = -EFAULT;
+			goto out;
+		}
+	} while (SMC_GET_CTL() & cmd);
+
+	if (! write) {
+		*val = SMC_inw(ioaddr, GP_REG);
+	}
+
+out:
+	/* Restore Control Register */
+	SMC_SET_CTL(ctl);
+	SMC_SELECT_BANK(2);
+
+	spin_unlock_irq(&lp->lock);
+	return res;
+}
+
+static int smc_ethtool_geteeprom(struct net_device *dev,
+        struct ethtool_eeprom *eeprom, u8 *bytes)
+{
+	int res;
+	u16 tmp;
+	unsigned int offset = eeprom->offset;
+	unsigned int len = eeprom->len;
+
+	if (offset + len > EEPROM_SIZE) {
+		return -EINVAL;
+	}
+
+	if (offset & 1) {
+		res = smc_eeprom_rw(dev, offset >> 1, &tmp, 0);
+		if (res) return res;
+		*bytes++ = tmp >> 8;
+		offset++;
+		len--;
+	}
+
+	for ( ; len > 1; len -= 2) {
+		res = smc_eeprom_rw(dev, offset >> 1, (u16*)bytes, 0);
+		if (res) return res;
+		bytes += 2;
+		offset += 2;
+	}
+
+	if (len > 0) {
+		res = smc_eeprom_rw(dev, offset >> 1, &tmp, 0);
+		if (res) return res;
+		*bytes = tmp & 0xff;
+	}
+
+	return 0;
+}
+
+static int smc_ethtool_seteeprom(struct net_device *dev,
+	struct ethtool_eeprom *eeprom, u8 *bytes)
+{
+	int res;
+	u16 tmp;
+	unsigned int offset = eeprom->offset;
+	unsigned int len = eeprom->len;
+
+	if (offset + len > EEPROM_SIZE) {
+		return -EINVAL;
+	}
+
+	if (offset & 1) {
+		res = smc_eeprom_rw(dev, offset >> 1, &tmp, 0);
+		if (res) return res;
+		tmp = (*bytes++ << 8) | (tmp & 0xff);
+		res = smc_eeprom_rw(dev, offset >> 1, &tmp, 1);
+		if (res) return res;
+		offset++;
+		len--;
+	}
+
+	for ( ; len > 1; len -= 2) {
+		res = smc_eeprom_rw(dev, offset >> 1, (u16*)bytes, 1);
+		if (res) return res;
+		bytes += 2;
+		offset += 2;
+	}
+
+	if (len > 0) {
+		res = smc_eeprom_rw(dev, offset >> 1, &tmp, 0);
+		if (res) return res;
+		tmp = (tmp & 0xff00) | (*bytes);
+		res = smc_eeprom_rw(dev, offset >> 1, &tmp, 1);
+		if (res) return res;
+	}
+
+	return 0;
+}
+
 static const struct ethtool_ops smc_ethtool_ops = {
 	.get_settings	= smc_ethtool_getsettings,
 	.set_settings	= smc_ethtool_setsettings,
@@ -1749,8 +1936,9 @@ static const struct ethtool_ops smc_ethtool_ops = {
 	.set_msglevel	= smc_ethtool_setmsglevel,
 	.nway_reset	= smc_ethtool_nwayreset,
 	.get_link	= ethtool_op_get_link,
-//	.get_eeprom	= smc_ethtool_geteeprom,
-//	.set_eeprom	= smc_ethtool_seteeprom,
+	.get_eeprom_len	= smc_ethtool_get_eeprom_len,
+	.get_eeprom	= smc_ethtool_geteeprom,
+	.set_eeprom	= smc_ethtool_seteeprom,
 };
 
 /*
@@ -2030,15 +2218,14 @@ static int __init smc_probe(struct net_device *dev, void __iomem *ioaddr)
 		printk("%s%s\n", nowait ? " [nowait]" : "",
 			THROTTLE_TX_PKTS ? " [throttle_tx]" : "");
 
+		/* Print the Ethernet address */
+		printk("%s: Ethernet addr: ", dev->name);
+		for (i = 0; i < 5; i++)
+			printk("%2.2x:", dev->dev_addr[i]);
+		printk("%2.2x\n", dev->dev_addr[5]);
 		if (!is_valid_ether_addr(dev->dev_addr)) {
 			printk("%s: Invalid ethernet MAC address.  Please "
 			       "set using ifconfig\n", dev->name);
-		} else {
-			/* Print the Ethernet address */
-			printk("%s: Ethernet addr: ", dev->name);
-			for (i = 0; i < 5; i++)
-				printk("%2.2x:", dev->dev_addr[i]);
-			printk("%2.2x\n", dev->dev_addr[5]);
 		}
 
 		if (lp->phy_type == 0) {
@@ -2322,9 +2509,9 @@ static int smc_drv_resume(struct platform_device *dev)
 		smc_enable_device(dev);
 		if (netif_running(ndev)) {
 			smc_reset(ndev);
-			smc_enable(ndev);
 			if (lp->phy_type != 0)
-				smc_phy_configure(&lp->phy_configure);
+				smc_phy_powerup(ndev);
+			smc_enable(ndev);
 			netif_device_attach(ndev);
 		}
 	}

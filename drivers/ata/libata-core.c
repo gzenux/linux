@@ -52,8 +52,13 @@
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
-#include <linux/libata.h>
+// #include <linux/libata.h>
 #include <asm/io.h>
+
+
+// Moved from above so that it is after this munging.
+#include <linux/libata.h>
+
 #include <asm/semaphore.h>
 #include <asm/byteorder.h>
 
@@ -3097,6 +3102,7 @@ static int ata_bus_softreset(struct ata_port *ap, unsigned int devmask,
 	iowrite8(ap->ctl | ATA_SRST, ioaddr->ctl_addr);
 	udelay(20);	/* FIXME: flush */
 	iowrite8(ap->ctl, ioaddr->ctl_addr);
+	ap->last_ctl = ap->ctl;
 
 	/* spec mandates ">= 2ms" before checking status.
 	 * We wait 150ms, because that was the magic delay used for
@@ -3195,6 +3201,7 @@ void ata_bus_reset(struct ata_port *ap)
 	if (ap->flags & (ATA_FLAG_SATA_RESET | ATA_FLAG_SRST)) {
 		/* set up device control for ATA_FLAG_SATA_RESET */
 		iowrite8(ap->ctl, ioaddr->ctl_addr);
+		ap->last_ctl = ap->ctl;
 	}
 
 	DPRINTK("EXIT\n");
@@ -3580,8 +3587,10 @@ void ata_std_postreset(struct ata_port *ap, unsigned int *classes)
 	}
 
 	/* set up device control */
-	if (ap->ioaddr.ctl_addr)
+	if (ap->ioaddr.ctl_addr) {
 		iowrite8(ap->ctl, ap->ioaddr.ctl_addr);
+		ap->last_ctl = ap->ctl;
+	}
 
 	DPRINTK("EXIT\n");
 }

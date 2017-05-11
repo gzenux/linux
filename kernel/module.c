@@ -32,6 +32,7 @@
 #include <linux/cpu.h>
 #include <linux/moduleparam.h>
 #include <linux/errno.h>
+#include <linux/immediate.h>
 #include <linux/err.h>
 #include <linux/vermagic.h>
 #include <linux/notifier.h>
@@ -58,13 +59,37 @@ extern int module_sysfs_initialized;
 #define ARCH_SHF_SMALL 0
 #endif
 
+#undef LKM_LOAD_BENCH
+#ifdef LKM_LOAD_BENCH
+
+#ifdef CONFIG_LKM_ELF_HASH
+const char lkm_loader[] = "ELF hash";
+#else
+const char lkm_loader[] = "Standard";
+#endif
+
+static inline s64 timeval_to_microsec(const struct timeval *tv)
+{
+	return ((s64) tv->tv_sec * 1000000L) + tv->tv_usec;
+}
+
+static inline void print_elapsed(const char *mod, struct timeval *start,
+				struct timeval *end)
+{
+	printk(KERN_INFO"LKM loader: %s - module: %s - spent %llu microsecs\n",
+	lkm_loader, mod, timeval_to_microsec(end)-timeval_to_microsec(start));
+}
+#endif
+
 /* If this is set, the section belongs in the init part of the module */
 #define INIT_OFFSET_MASK (1UL << (BITS_PER_LONG-1))
 
 /* List of modules, protected by module_mutex or preempt_disable
- * (add/delete uses stop_machine). */
+ * (add/delete uses stop_machine). Sorted by ascending list node address.
+ */
 static DEFINE_MUTEX(module_mutex);
 static LIST_HEAD(modules);
+static DECLARE_MUTEX(notify_mutex);
 
 static BLOCKING_NOTIFIER_HEAD(module_notify_list);
 
@@ -134,6 +159,16 @@ extern const struct kernel_symbol __start___ksymtab_unused_gpl[];
 extern const struct kernel_symbol __stop___ksymtab_unused_gpl[];
 extern const struct kernel_symbol __start___ksymtab_gpl_future[];
 extern const struct kernel_symbol __stop___ksymtab_gpl_future[];
+
+#ifdef CONFIG_LKM_ELF_HASH
+/* Provided by the linker as well*/
+extern const uint32_t __start___ksymtab_htable[];
+extern const uint32_t __start___ksymtab_gpl_htable[];
+extern const uint32_t __start___ksymtab_gpl_future_htable[];
+extern const uint32_t __start___ksymtab_unused_htable[];
+extern const uint32_t __start___ksymtab_unused_gpl_htable[];
+#endif
+
 extern const unsigned long __start___kcrctab[];
 extern const unsigned long __start___kcrctab_gpl[];
 extern const unsigned long __start___kcrctab_gpl_future[];
@@ -146,7 +181,112 @@ extern const unsigned long __start___kcrctab_unused_gpl[];
 #define symversion(base, idx) ((base != NULL) ? ((base) + (idx)) : NULL)
 #endif
 
-/* lookup symbol in given range of kernel_symbols */
+#ifdef CONFIG_LKM_ELF_HASH
+
+#define HASH_VALUE_PARAM const unsigned long gnu_hash_value,
+#define HASH_VALUE_DEF(__name) \
+	const unsigned long gnu_hash_value = gnu_hash(__name)
+#define HASH_VALUE_ARG gnu_hash_value,
+
+#define SYMHASH_INDEX_DEF unsigned int symhashindex = 0
+#define SYMHASH_INDEX_ARG symhashindex,
+#define SYMHASH_INDEX_PARAM unsigned int symhashindex,
+#define	SYM_HASH(__sym) gnu_hash(__sym),
+#define KSYM_HASH(__sym) __sym.hash_value,
+#define HTABLE_DECL const uint32_t *htable
+#define HTABLE_SET(__tab) htable = __tab##_htable
+#define HTABLE_ARG , htable
+#define MOD_HTABLE_SET(__syms) htable = __syms##_htable
+
+/* Symbol lookup is done by using ELF hash table */
+#define LOOKUP_SYMBOL(_name, _start, _stop) \
+	elf_hash_lookup_symbol(_name, HASH_VALUE_ARG _start, _stop HTABLE_ARG)
+
+static unsigned long gnu_hash(const unsigned char *name)
+{
+	unsigned long h = 5381;
+	unsigned char c;
+	for (c = *name; c != '\0'; c = *++name)
+		h = h * 33 + c;
+	return h & 0xffffffff;
+}
+
+/* lookup symbol on given range of kernel_symbols
+ * It uses an ELF hash table to perform symbol lookup.
+ * Symbol's hash value are already computed at build time and
+ * available in the .undef.hash ELF section
+ */
+static const struct kernel_symbol *elf_hash_lookup_symbol(const char *name,
+	const unsigned long hash_value,
+	const struct kernel_symbol *start,
+	const struct kernel_symbol *stop,
+	const uint32_t *htable)
+{
+	const struct kernel_symbol *ks;
+	unsigned int idx;
+	uint32_t symidx;
+	struct elf_htable ht;
+
+	/* Check if the kernel symbol table is empty */
+	if (start == stop)
+		return NULL;
+
+	/* Sanity check: htable must be not NULL */
+	if (htable == NULL)
+		return NULL;
+
+	/* Get hash field from the ELF section */
+	ht.nbucket = *htable++;
+	ht.nchain = *htable++;
+	ht.elf_buckets = htable;
+	htable += ht.nbucket;
+	ht.chains = htable;
+
+	/* Perfom lookup using ELF hash table */
+	idx = hash_value % ht.nbucket;
+
+	for (symidx = ht.elf_buckets[idx]; symidx != -1; symidx = ht.chains[symidx]) {
+		ks = start + symidx;
+		/*
+		 * If hash values don't match, we are sure symbols are
+		 * different, otherwise we need to explicitely do string
+		 * comparison.
+		 */
+		if ((ks->hash_value == hash_value) && !strcmp(ks->name, name))
+			return ks;
+		else
+		/*
+		 * After the first try, we are going to look into the chain
+		 * array, so we must be sure that the symidx does not cross
+		 * the boundary.
+		 */
+			if (symidx >= ht.nchain)
+				return NULL;
+	}
+	return NULL;
+}
+
+#else
+/* All hash macros are no ops */
+#define HASH_VALUE_PARAM
+#define HASH_VALUE_DEF(__name)
+#define HASH_VALUE_ARG
+#define SYMHASH_INDEX_DEF
+#define SYMHASH_INDEX_ARG
+#define SYMHASH_INDEX_PARAM
+#define	SYM_HASH(__sym)
+#define KSYM_HASH(__sym)
+#define HTABLE_DECL
+#define HTABLE_SET(__val)
+#define HTABLE_ARG
+#define MOD_HTABLE_SET(__syms)
+/* Symbol lookup is done by standard algorithm */
+#define LOOKUP_SYMBOL(__name, __start, __stop) \
+	lookup_symbol(__name, __start, __stop)
+
+/* lookup symbol on given range of kernel_symbols
+ * It use simply a string comparison for finding the matching symbol.
+ */
 static const struct kernel_symbol *lookup_symbol(const char *name,
 	const struct kernel_symbol *start,
 	const struct kernel_symbol *stop)
@@ -157,6 +297,7 @@ static const struct kernel_symbol *lookup_symbol(const char *name,
 			return ks;
 	return NULL;
 }
+#endif
 
 static void printk_unused_warning(const char *name)
 {
@@ -170,31 +311,37 @@ static void printk_unused_warning(const char *name)
 }
 
 /* Find a symbol, return value, crc and module which owns it */
-static unsigned long __find_symbol(const char *name,
+static unsigned long __find_symbol(const char *name, HASH_VALUE_PARAM
 				   struct module **owner,
 				   const unsigned long **crc,
 				   int gplok)
 {
 	struct module *mod;
 	const struct kernel_symbol *ks;
+	HTABLE_DECL;
 
-	/* Core kernel first. */ 
+	/* Core kernel first. */
 	*owner = NULL;
-	ks = lookup_symbol(name, __start___ksymtab, __stop___ksymtab);
+	HTABLE_SET(__start___ksymtab);
+	ks = LOOKUP_SYMBOL(name, __start___ksymtab, __stop___ksymtab);
+
 	if (ks) {
 		*crc = symversion(__start___kcrctab, (ks - __start___ksymtab));
 		return ks->value;
 	}
 	if (gplok) {
-		ks = lookup_symbol(name, __start___ksymtab_gpl,
-					 __stop___ksymtab_gpl);
+		HTABLE_SET(__start___ksymtab_gpl);
+		ks = LOOKUP_SYMBOL(name, __start___ksymtab_gpl,
+				__stop___ksymtab_gpl);
 		if (ks) {
 			*crc = symversion(__start___kcrctab_gpl,
 					  (ks - __start___ksymtab_gpl));
 			return ks->value;
 		}
 	}
-	ks = lookup_symbol(name, __start___ksymtab_gpl_future,
+
+	HTABLE_SET(__start___ksymtab_gpl_future);
+	ks = LOOKUP_SYMBOL(name, __start___ksymtab_gpl_future,
 				 __stop___ksymtab_gpl_future);
 	if (ks) {
 		if (!gplok) {
@@ -210,8 +357,8 @@ static unsigned long __find_symbol(const char *name,
 				  (ks - __start___ksymtab_gpl_future));
 		return ks->value;
 	}
-
-	ks = lookup_symbol(name, __start___ksymtab_unused,
+	HTABLE_SET(__start___ksymtab_unused);
+	ks = LOOKUP_SYMBOL(name, __start___ksymtab_unused,
 				 __stop___ksymtab_unused);
 	if (ks) {
 		printk_unused_warning(name);
@@ -220,9 +367,11 @@ static unsigned long __find_symbol(const char *name,
 		return ks->value;
 	}
 
-	if (gplok)
-		ks = lookup_symbol(name, __start___ksymtab_unused_gpl,
-				 __stop___ksymtab_unused_gpl);
+	if (gplok) {
+		HTABLE_SET(__start___ksymtab_unused_gpl);
+		ks = LOOKUP_SYMBOL(name, __start___ksymtab_unused_gpl,
+				__stop___ksymtab_unused_gpl);
+	}
 	if (ks) {
 		printk_unused_warning(name);
 		*crc = symversion(__start___kcrctab_unused_gpl,
@@ -232,32 +381,39 @@ static unsigned long __find_symbol(const char *name,
 
 	/* Now try modules. */ 
 	list_for_each_entry(mod, &modules, list) {
+
 		*owner = mod;
-		ks = lookup_symbol(name, mod->syms, mod->syms + mod->num_syms);
+		MOD_HTABLE_SET(mod->syms);
+		ks = LOOKUP_SYMBOL(name, mod->syms, mod->syms + mod->num_syms);
 		if (ks) {
 			*crc = symversion(mod->crcs, (ks - mod->syms));
 			return ks->value;
 		}
 
 		if (gplok) {
-			ks = lookup_symbol(name, mod->gpl_syms,
-					   mod->gpl_syms + mod->num_gpl_syms);
+			MOD_HTABLE_SET(mod->gpl_syms);
+			ks = LOOKUP_SYMBOL(name, mod->gpl_syms,
+				mod->gpl_syms + mod->num_gpl_syms);
 			if (ks) {
 				*crc = symversion(mod->gpl_crcs,
 						  (ks - mod->gpl_syms));
 				return ks->value;
 			}
 		}
-		ks = lookup_symbol(name, mod->unused_syms, mod->unused_syms + mod->num_unused_syms);
+		MOD_HTABLE_SET(mod->unused_syms);
+		ks = LOOKUP_SYMBOL(name, mod->unused_syms,
+				mod->unused_syms + mod->num_unused_syms);
 		if (ks) {
 			printk_unused_warning(name);
-			*crc = symversion(mod->unused_crcs, (ks - mod->unused_syms));
+			*crc = symversion(mod->unused_crcs,
+				(ks - mod->unused_syms));
 			return ks->value;
 		}
 
 		if (gplok) {
-			ks = lookup_symbol(name, mod->unused_gpl_syms,
-					   mod->unused_gpl_syms + mod->num_unused_gpl_syms);
+			MOD_HTABLE_SET(mod->unused_gpl_syms);
+			ks = LOOKUP_SYMBOL(name, mod->unused_gpl_syms,
+				mod->unused_gpl_syms+mod->num_unused_gpl_syms);
 			if (ks) {
 				printk_unused_warning(name);
 				*crc = symversion(mod->unused_gpl_crcs,
@@ -265,7 +421,8 @@ static unsigned long __find_symbol(const char *name,
 				return ks->value;
 			}
 		}
-		ks = lookup_symbol(name, mod->gpl_future_syms,
+		MOD_HTABLE_SET(mod->gpl_future_syms);
+		ks = LOOKUP_SYMBOL(name, mod->gpl_future_syms,
 				   (mod->gpl_future_syms +
 				    mod->num_gpl_future_syms));
 		if (ks) {
@@ -710,6 +867,12 @@ sys_delete_module(const char __user *name_user, unsigned int flags)
 	if (ret != 0)
 		goto out;
 
+	down(&notify_mutex);
+	blocking_notifier_call_chain(&module_notify_list, MODULE_STATE_GOING,
+								 mod);
+	up(&notify_mutex);
+
+
 	/* Never wait if forced. */
 	if (!forced && module_refcount(mod) != 0)
 		wait_for_zero_refcount(mod);
@@ -721,6 +884,11 @@ sys_delete_module(const char __user *name_user, unsigned int flags)
 		mutex_lock(&module_mutex);
 	}
 	free_module(mod);
+
+	down(&notify_mutex);
+	blocking_notifier_call_chain(&module_notify_list, MODULE_STATE_GONE,
+			NULL);
+	up(&notify_mutex);
 
  out:
 	mutex_unlock(&module_mutex);
@@ -761,7 +929,7 @@ void __symbol_put(const char *symbol)
 	const unsigned long *crc;
 
 	preempt_disable();
-	if (!__find_symbol(symbol, &owner, &crc, 1))
+	if (!__find_symbol(symbol, SYM_HASH(symbol) &owner, &crc, 1))
 		BUG();
 	module_put(owner);
 	preempt_enable();
@@ -841,6 +1009,9 @@ static ssize_t show_initstate(struct module_attribute *mattr,
 	case MODULE_STATE_GOING:
 		state = "going";
 		break;
+	case MODULE_STATE_GONE:
+		state = "gone";
+		break;
 	}
 	return sprintf(buffer, "%s\n", state);
 }
@@ -907,7 +1078,8 @@ static inline int check_modstruct_version(Elf_Shdr *sechdrs,
 	const unsigned long *crc;
 	struct module *owner;
 
-	if (!__find_symbol("struct_module", &owner, &crc, 1))
+	if (!__find_symbol("struct_module", SYM_HASH("struct_module") &owner,
+			&crc, 1))
 		BUG();
 	return check_version(sechdrs, versindex, "struct_module", mod,
 			     crc);
@@ -948,13 +1120,14 @@ static inline int same_magic(const char *amagic, const char *bmagic)
 static unsigned long resolve_symbol(Elf_Shdr *sechdrs,
 				    unsigned int versindex,
 				    const char *name,
+					HASH_VALUE_PARAM
 				    struct module *mod)
 {
 	struct module *owner;
 	unsigned long ret;
 	const unsigned long *crc;
 
-	ret = __find_symbol(name, &owner, &crc,
+	ret = __find_symbol(name, HASH_VALUE_ARG &owner, &crc,
 			!(mod->taints & TAINT_PROPRIETARY_MODULE));
 	if (ret) {
 		/* use_module can fail due to OOM, or module unloading */
@@ -1195,6 +1368,8 @@ static int __unlink_module(void *_mod)
 /* Free a module, remove from lists, etc (must hold module_mutex). */
 static void free_module(struct module *mod)
 {
+	trace_mark(kernel_module_free, "name %s", mod->name);
+
 	/* Delete from various lists */
 	stop_machine_run(__unlink_module, mod, NR_CPUS);
 	remove_sect_attrs(mod);
@@ -1204,6 +1379,11 @@ static void free_module(struct module *mod)
 
 	/* Arch-specific cleanup. */
 	module_arch_cleanup(mod);
+
+#ifdef CONFIG_KGDB
+	/* kgdb info */
+	vfree(mod->mod_sections);
+#endif
 
 	/* Module unload stuff */
 	module_unload_free(mod);
@@ -1228,7 +1408,7 @@ void *__symbol_get(const char *symbol)
 	const unsigned long *crc;
 
 	preempt_disable();
-	value = __find_symbol(symbol, &owner, &crc, 1);
+	value = __find_symbol(symbol, SYM_HASH(symbol) &owner, &crc, 1);
 	if (value && !strong_try_module_get(owner))
 		value = 0;
 	preempt_enable();
@@ -1249,14 +1429,16 @@ static int verify_export_symbols(struct module *mod)
 	const unsigned long *crc;
 
 	for (i = 0; i < mod->num_syms; i++)
-	        if (__find_symbol(mod->syms[i].name, &owner, &crc, 1)) {
+		if (__find_symbol(mod->syms[i].name,
+				KSYM_HASH(mod->syms[i])&owner, &crc, 1)) {
 			name = mod->syms[i].name;
 			ret = -ENOEXEC;
 			goto dup;
 		}
 
 	for (i = 0; i < mod->num_gpl_syms; i++)
-	        if (__find_symbol(mod->gpl_syms[i].name, &owner, &crc, 1)) {
+		if (__find_symbol(mod->gpl_syms[i].name,
+				KSYM_HASH(mod->gpl_syms[i]) &owner, &crc, 1)) {
 			name = mod->gpl_syms[i].name;
 			ret = -ENOEXEC;
 			goto dup;
@@ -1273,6 +1455,7 @@ dup:
 /* Change all symbols so that sh_value encodes the pointer directly. */
 static int simplify_symbols(Elf_Shdr *sechdrs,
 			    unsigned int symindex,
+				SYMHASH_INDEX_PARAM
 			    const char *strtab,
 			    unsigned int versindex,
 			    unsigned int pcpuindex,
@@ -1282,6 +1465,13 @@ static int simplify_symbols(Elf_Shdr *sechdrs,
 	unsigned long secbase;
 	unsigned int i, n = sechdrs[symindex].sh_size / sizeof(Elf_Sym);
 	int ret = 0;
+#ifdef CONFIG_LKM_ELF_HASH
+#define HASH_VALUE hash_values[u++],
+	unsigned long *hash_values = (void *)sechdrs[symhashindex].sh_addr;
+	unsigned int u = 0;
+#else
+#define HASH_VALUE
+#endif
 
 	for (i = 1; i < n; i++) {
 		switch (sym[i].st_shndx) {
@@ -1303,7 +1493,8 @@ static int simplify_symbols(Elf_Shdr *sechdrs,
 		case SHN_UNDEF:
 			sym[i].st_value
 			  = resolve_symbol(sechdrs, versindex,
-					   strtab + sym[i].st_name, mod);
+					strtab + sym[i].st_name,
+					HASH_VALUE mod);
 
 			/* Ok if resolved.  */
 			if (sym[i].st_value != 0)
@@ -1464,16 +1655,47 @@ static void setup_modinfo(struct module *mod, Elf_Shdr *sechdrs,
 	}
 }
 
+#ifdef CONFIG_KGDB
+int add_modsects(struct module *mod, Elf_Ehdr *hdr, Elf_Shdr *sechdrs,
+		const char *secstrings)
+{
+	 int i;
+
+	 mod->num_sections = hdr->e_shnum - 1;
+	 mod->mod_sections = vmalloc((hdr->e_shnum - 1) *
+		sizeof(struct mod_section));
+
+	 if (mod->mod_sections == NULL)
+		 return -ENOMEM;
+
+	 for (i = 1; i < hdr->e_shnum; i++) {
+		 mod->mod_sections[i - 1].address = (void *)sechdrs[i].sh_addr;
+		 strncpy(mod->mod_sections[i - 1].name, secstrings +
+				 sechdrs[i].sh_name, MAX_SECTNAME);
+		 mod->mod_sections[i - 1].name[MAX_SECTNAME] = '\0';
+	}
+
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_KALLSYMS
 static int is_exported(const char *name, const struct module *mod)
 {
-	if (!mod && lookup_symbol(name, __start___ksymtab, __stop___ksymtab))
+	HASH_VALUE_DEF(name);
+	HTABLE_DECL;
+	HTABLE_SET(__start___ksymtab);
+
+	if (!mod && LOOKUP_SYMBOL(name, __start___ksymtab, __stop___ksymtab))
 		return 1;
-	else
-		if (mod && lookup_symbol(name, mod->syms, mod->syms + mod->num_syms))
+	else {
+		MOD_HTABLE_SET(mod->syms);
+		if (mod && LOOKUP_SYMBOL(name, mod->syms,
+				mod->syms + mod->num_syms))
 			return 1;
 		else
 			return 0;
+	}
 }
 
 /* As per nm */
@@ -1574,10 +1796,27 @@ static struct module *load_module(void __user *umod,
 	unsigned int unusedcrcindex;
 	unsigned int unusedgplindex;
 	unsigned int unusedgplcrcindex;
+	unsigned int immediateindex;
+	unsigned int markersindex;
+	unsigned int markersstringsindex;
+#ifdef CONFIG_LKM_ELF_HASH
+	unsigned int symhashindex;
+	unsigned int export_hashindex;
+	unsigned int gpl_hashindex;
+	unsigned int gplfuture_hashindex;
+	unsigned int unused_hashindex;
+	unsigned int unusedgpl_hashindex;
+#endif
+
 	struct module *mod;
 	long err = 0;
 	void *percpu = NULL, *ptr = NULL; /* Stops spurious gcc warning */
 	struct exception_table_entry *extable;
+
+#ifdef LKM_LOAD_BENCH
+	struct timeval start, end;
+#endif
+
 	mm_segment_t old_fs;
 
 	DEBUGP("load_module: umod=%p, len=%lu, uargs=%p\n",
@@ -1650,12 +1889,39 @@ static struct module *load_module(void __user *umod,
 		goto free_hdr;
 	}
 
+#ifdef CONFIG_LKM_ELF_HASH
+	/* FIXME: check if it required or not */
+	symhashindex = find_sec(hdr, sechdrs, secstrings, ".undef.hash");
+	if (symhashindex == 0) {
+		printk(KERN_WARNING "%s: module has no hash values for symbols \
+			(stripped?)\n", mod->name);
+		err = -ENOEXEC;
+		goto free_hdr;
+	}
+#endif
+
+
 	/* Optional sections */
 	exportindex = find_sec(hdr, sechdrs, secstrings, "__ksymtab");
 	gplindex = find_sec(hdr, sechdrs, secstrings, "__ksymtab_gpl");
 	gplfutureindex = find_sec(hdr, sechdrs, secstrings, "__ksymtab_gpl_future");
 	unusedindex = find_sec(hdr, sechdrs, secstrings, "__ksymtab_unused");
 	unusedgplindex = find_sec(hdr, sechdrs, secstrings, "__ksymtab_unused_gpl");
+
+#ifdef CONFIG_LKM_ELF_HASH
+	/* Optional sections as well */
+	/* ELF hash tables for exported symbols sections */
+	export_hashindex = find_sec(hdr, sechdrs, secstrings,
+				"__ksymtab.htable");
+	gpl_hashindex = find_sec(hdr, sechdrs, secstrings,
+				"__ksymtab_gpl.htable");
+	gplfuture_hashindex = find_sec(hdr, sechdrs, secstrings,
+				"__ksymtab_gpl_future.htable");
+	unused_hashindex = find_sec(hdr, sechdrs, secstrings,
+				"__ksymtab_unused.htable");
+	unusedgpl_hashindex = find_sec(hdr, sechdrs, secstrings,
+				"__ksymtab_unused_gpl.htable");
+#endif
 	crcindex = find_sec(hdr, sechdrs, secstrings, "__kcrctab");
 	gplcrcindex = find_sec(hdr, sechdrs, secstrings, "__kcrctab_gpl");
 	gplfuturecrcindex = find_sec(hdr, sechdrs, secstrings, "__kcrctab_gpl_future");
@@ -1670,6 +1936,7 @@ static struct module *load_module(void __user *umod,
 #ifdef ARCH_UNWIND_SECTION_NAME
 	unwindex = find_sec(hdr, sechdrs, secstrings, ARCH_UNWIND_SECTION_NAME);
 #endif
+	immediateindex = find_sec(hdr, sechdrs, secstrings, "__immediate");
 
 	/* Don't keep modinfo section */
 	sechdrs[infoindex].sh_flags &= ~(unsigned long)SHF_ALLOC;
@@ -1797,11 +2064,17 @@ static struct module *load_module(void __user *umod,
 	setup_modinfo(mod, sechdrs, infoindex);
 
 	/* Fix up syms, so that st_value is a pointer to location. */
-	err = simplify_symbols(sechdrs, symindex, strtab, versindex, pcpuindex,
-			       mod);
+#ifdef LKM_LOAD_BENCH
+	do_gettimeofday(&start);
+#endif
+	err = simplify_symbols(sechdrs, symindex, SYMHASH_INDEX_ARG strtab,
+				versindex, pcpuindex, mod);
 	if (err < 0)
 		goto cleanup;
-
+#ifdef LKM_LOAD_BENCH
+	do_gettimeofday(&end);
+	print_elapsed(mod->name, &start, &end);
+#endif
 	/* Set up EXPORTed & EXPORT_GPLed symbols (section 0 is 0 length) */
 	mod->num_syms = sechdrs[exportindex].sh_size / sizeof(*mod->syms);
 	mod->syms = (void *)sechdrs[exportindex].sh_addr;
@@ -1820,6 +2093,11 @@ static struct module *load_module(void __user *umod,
 	mod->gpl_future_syms = (void *)sechdrs[gplfutureindex].sh_addr;
 	if (gplfuturecrcindex)
 		mod->gpl_future_crcs = (void *)sechdrs[gplfuturecrcindex].sh_addr;
+#ifdef CONFIG_IMMEDIATE
+	mod->immediate = (void *)sechdrs[immediateindex].sh_addr;
+	mod->num_immediate =
+		sechdrs[immediateindex].sh_size / sizeof(*mod->immediate);
+#endif
 
 	mod->unused_syms = (void *)sechdrs[unusedindex].sh_addr;
 	if (unusedcrcindex)
@@ -1827,6 +2105,15 @@ static struct module *load_module(void __user *umod,
 	mod->unused_gpl_syms = (void *)sechdrs[unusedgplindex].sh_addr;
 	if (unusedgplcrcindex)
 		mod->unused_crcs = (void *)sechdrs[unusedgplcrcindex].sh_addr;
+
+#ifdef CONFIG_LKM_ELF_HASH
+	/* Set up EXPORTed & EXPORT_GPLed symbols ELF hash table */
+	mod->syms_htable = (void *)sechdrs[export_hashindex].sh_addr;
+	mod->gpl_syms_htable = (void *)sechdrs[gpl_hashindex].sh_addr;
+	mod->gpl_future_syms_htable = (void *)sechdrs[gplfuture_hashindex].sh_addr;
+	mod->unused_syms_htable = (void *)sechdrs[unused_hashindex].sh_addr;
+	mod->unused_gpl_syms_htable = (void *)sechdrs[unusedgpl_hashindex].sh_addr;
+#endif
 
 #ifdef CONFIG_MODVERSIONS
 	if ((mod->num_syms && !crcindex) || 
@@ -1839,6 +2126,9 @@ static struct module *load_module(void __user *umod,
 		add_taint_module(mod, TAINT_FORCED_MODULE);
 	}
 #endif
+	markersindex = find_sec(hdr, sechdrs, secstrings, "__markers");
+ 	markersstringsindex = find_sec(hdr, sechdrs, secstrings,
+					"__markers_strings");
 
 	/* Now do relocations. */
 	for (i = 1; i < hdr->e_shnum; i++) {
@@ -1861,6 +2151,11 @@ static struct module *load_module(void __user *umod,
 		if (err < 0)
 			goto cleanup;
 	}
+#ifdef CONFIG_MARKERS
+	mod->markers = (void *)sechdrs[markersindex].sh_addr;
+	mod->num_markers =
+		sechdrs[markersindex].sh_size / sizeof(*mod->markers);
+#endif
 
         /* Find duplicate symbols */
 	err = verify_export_symbols(mod);
@@ -1878,6 +2173,22 @@ static struct module *load_module(void __user *umod,
 		       sechdrs[pcpuindex].sh_size);
 
 	add_kallsyms(mod, sechdrs, symindex, strindex, secstrings);
+
+#ifdef CONFIG_KGDB
+	err = add_modsects(mod, hdr, sechdrs, secstrings);
+	 if (err < 0)
+		 goto nomodsectinfo;
+#endif
+	if (!mod->taints) {
+#ifdef CONFIG_IMMEDIATE
+	immediate_update_range(mod->immediate,
+		mod->immediate + mod->num_immediate);
+#endif
+#ifdef CONFIG_MARKERS
+		marker_update_probe_range(mod->markers,
+			mod->markers + mod->num_markers, NULL, NULL);
+#endif
+	}
 
 	err = module_finalize(hdr, sechdrs, mod);
 	if (err < 0)
@@ -1933,12 +2244,19 @@ static struct module *load_module(void __user *umod,
 	/* Get rid of temporary copy */
 	vfree(hdr);
 
+	trace_mark(kernel_module_load, "name %s", mod->name);
+
 	/* Done! */
 	return mod;
 
  arch_cleanup:
 	module_arch_cleanup(mod);
  cleanup:
+
+#ifdef CONFIG_KGDB
+nomodsectinfo:
+	vfree(mod->mod_sections);
+#endif
 	module_unload_free(mod);
 	module_free(mod, mod->module_init);
  free_core:
@@ -1961,10 +2279,24 @@ static struct module *load_module(void __user *umod,
 /*
  * link the module with the whole machine is stopped with interrupts off
  * - this defends against kallsyms not taking locks
+ * We sort the modules by struct module pointer address to permit correct
+ * iteration over modules of, at least, kallsyms for preemptible operations,
+ * such as read(). Sorting by struct module pointer address is equivalent to
+ * sort by list node address.
  */
 static int __link_module(void *_mod)
 {
-	struct module *mod = _mod;
+	struct module *mod = _mod, *iter;
+
+	list_for_each_entry_reverse(iter, &modules, list) {
+		BUG_ON(iter == mod);	/* Should never be in the list twice */
+		if (iter < mod) {
+			/* We belong to the location right after iter. */
+			list_add(&mod->list, &iter->list);
+			return 0;
+		}
+	}
+	/* We should be added at the head of the list */
 	list_add(&mod->list, &modules);
 	return 0;
 }
@@ -2010,6 +2342,11 @@ sys_init_module(void __user *umod,
 		/* Init routine failed: abort.  Try to protect us from
                    buggy refcounters. */
 		mod->state = MODULE_STATE_GOING;
+		down(&notify_mutex);
+		blocking_notifier_call_chain(&module_notify_list,
+				MODULE_STATE_GOING,
+				mod);
+		up(&notify_mutex);
 		synchronize_sched();
 		if (mod->unsafe)
 			printk(KERN_ERR "%s: module is now stuck!\n",
@@ -2229,12 +2566,12 @@ unsigned long module_kallsyms_lookup_name(const char *name)
 static void *m_start(struct seq_file *m, loff_t *pos)
 {
 	mutex_lock(&module_mutex);
-	return seq_list_start(&modules, *pos);
+	return seq_sorted_list_start(&modules, pos);
 }
 
 static void *m_next(struct seq_file *m, void *p, loff_t *pos)
 {
-	return seq_list_next(p, &modules, pos);
+	return seq_sorted_list_next(p, &modules, pos);
 }
 
 static void m_stop(struct seq_file *m, void *p)
@@ -2300,6 +2637,27 @@ const struct seq_operations modules_op = {
 	.stop	= m_stop,
 	.show	= m_show
 };
+
+void list_modules(void *call_data)
+{
+	/* Enumerate loaded modules */
+	struct list_head	*i;
+	struct module		*mod;
+	unsigned long refcount = 0;
+
+	mutex_lock(&module_mutex);
+	list_for_each(i, &modules) {
+		mod = list_entry(i, struct module, list);
+#ifdef CONFIG_MODULE_UNLOAD
+		refcount = local_read(&mod->ref[0].count);
+#endif
+		__trace_mark(0, list_module, call_data,
+				"name %s state %d refcount %lu",
+				mod->name, mod->state, refcount);
+	}
+	mutex_unlock(&module_mutex);
+}
+EXPORT_SYMBOL_GPL(list_modules);
 
 /* Given an address, look for it in the module exception tables. */
 const struct exception_table_entry *search_module_extables(unsigned long addr)
@@ -2473,4 +2831,86 @@ EXPORT_SYMBOL(module_remove_driver);
 /* Generate the signature for struct module here, too, for modversions. */
 void struct_module(struct module *mod) { return; }
 EXPORT_SYMBOL(struct_module);
+#endif
+
+#ifdef CONFIG_MARKERS
+void module_update_markers(struct module *probe_module, int *refcount)
+{
+	struct module *mod;
+
+	mutex_lock(&module_mutex);
+	list_for_each_entry(mod, &modules, list)
+		if (!mod->taints)
+			marker_update_probe_range(mod->markers,
+				mod->markers + mod->num_markers,
+				probe_module, refcount);
+	mutex_unlock(&module_mutex);
+}
+
+/*
+ * Returns 0 if current not found.
+ * Returns 1 if current found.
+ */
+int module_get_iter_markers(struct marker_iter *iter)
+{
+	struct module *iter_mod;
+	int found = 0;
+
+	mutex_lock(&module_mutex);
+	list_for_each_entry(iter_mod, &modules, list) {
+		if (!iter_mod->taints) {
+			/*
+			 * Sorted module list
+			 */
+			if (iter_mod < iter->module)
+				continue;
+			else if (iter_mod > iter->module)
+				iter->marker = NULL;
+			found = marker_get_iter_range(&iter->marker,
+				iter_mod->markers,
+				iter_mod->markers + iter_mod->num_markers);
+			if (found) {
+				iter->module = iter_mod;
+				break;
+			}
+		}
+	}
+	mutex_unlock(&module_mutex);
+	return found;
+}
+#endif
+
+#ifdef CONFIG_IMMEDIATE
+/**
+ * _module_immediate_update - update all immediate values in the kernel
+ *
+ * Iterate on the kernel core and modules to update the immediate values.
+ * Module_mutex must be held be the caller.
+ */
+void _module_immediate_update(void)
+{
+	struct module *mod;
+
+	list_for_each_entry(mod, &modules, list) {
+		if (mod->taints)
+			continue;
+		immediate_update_range(mod->immediate,
+			mod->immediate + mod->num_immediate);
+	}
+}
+EXPORT_SYMBOL_GPL(_module_immediate_update);
+
+/**
+ * module_immediate_update - update all immediate values in the kernel
+ *
+ * Iterate on the kernel core and modules to update the immediate values.
+ * Takes module_mutex.
+ */
+void module_immediate_update(void)
+{
+	mutex_lock(&module_mutex);
+	_module_immediate_update();
+	mutex_unlock(&module_mutex);
+}
+EXPORT_SYMBOL_GPL(module_immediate_update);
 #endif

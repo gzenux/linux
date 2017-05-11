@@ -1203,8 +1203,7 @@ EXPORT_SYMBOL_GPL(relay_file_operations);
 
 static __init int relay_init(void)
 {
-
-	hotcpu_notifier(relay_hotcpu_callback, 0);
+	hotcpu_notifier(relay_hotcpu_callback, 5);
 	return 0;
 }
 

@@ -28,6 +28,7 @@ struct task_struct *__switch_to(struct task_struct *prev,
  register unsigned long *__ts6 __asm__ ("r6") = &next->thread.sp;	\
  register unsigned long __ts7 __asm__ ("r7") = next->thread.pc;		\
  __asm__ __volatile__ (".balign 4\n\t" 					\
+		       "__switch_to_begin:\n\t"				\
 		       "stc.l	gbr, @-r15\n\t" 			\
 		       "sts.l	pr, @-r15\n\t" 				\
 		       "mov.l	r8, @-r15\n\t" 				\
@@ -57,6 +58,7 @@ struct task_struct *__switch_to(struct task_struct *prev,
 		       "mov.l	@r15+, r8\n\t"				\
 		       "lds.l	@r15+, pr\n\t"				\
 		       "ldc.l	@r15+, gbr\n\t"				\
+		       "__switch_to_end:\n\t"				\
 		       : "=z" (__last)					\
 		       : "r" (__ts1), "r" (__ts2), "r" (__ts4), 	\
 			 "r" (__ts5), "r" (__ts6), "r" (__ts7) 		\
@@ -118,29 +120,30 @@ struct task_struct *__switch_to(struct task_struct *prev,
 
 #define set_mb(var, value) do { (void)xchg(&var, value); } while (0)
 
+extern unsigned long cached_to_uncached;
+
 /*
- * Jump to P2 area.
- * When handling TLB or caches, we need to do it from P2 area.
+ * Jump to uncached area.
+ * When handling TLB or caches, we need to do it from an uncached area.
  */
-#define jump_to_P2()			\
-do {					\
-	unsigned long __dummy;		\
-	__asm__ __volatile__(		\
-		"mov.l	1f, %0\n\t"	\
-		"or	%1, %0\n\t"	\
-		"jmp	@%0\n\t"	\
-		" nop\n\t" 		\
-		".balign 4\n"		\
-		"1:	.long 2f\n"	\
-		"2:"			\
-		: "=&r" (__dummy)	\
-		: "r" (0x20000000));	\
+#define jump_to_uncached()			\
+do {						\
+	unsigned long __dummy;			\
+	__asm__ __volatile__(			\
+		"mova	1f, %0\n\t"		\
+		"add	%1, %0\n\t"		\
+		"jmp	@%0\n\t"		\
+		" nop\n\t" 			\
+		".balign 4\n"			\
+		"1:"				\
+		: "=&z" (__dummy)		\
+		: "r" (cached_to_uncached));	\
 } while (0)
 
 /*
- * Back to P1 area.
+ * Back to cached area.
  */
-#define back_to_P1()					\
+#define back_to_cached()				\
 do {							\
 	unsigned long __dummy;				\
 	ctrl_barrier();					\
@@ -154,6 +157,51 @@ do {							\
 		: "=&r" (__dummy));			\
 } while (0)
 
+#define __uses_jump_to_uncached \
+	noinline __attribute__ ((__section__ (".uncached")))
+
+#if defined(CONFIG_SH_GRB)
+static inline unsigned long xchg_u32(volatile u32 * m, unsigned long val)
+{
+       unsigned long retval;
+       asm volatile(
+                "   .align 2              \n\t"
+                "   mova    1f,   r0      \n\t" // r0 = end point
+                "   nop                   \n\t"
+                "   mov    r15,   r1      \n\t" // r1 = saved sp
+                "   mov    #-4,   r15     \n\t" // LOGIN
+                "   mov.l  @%1,   %0      \n\t" // load  old value
+                "   mov.l   %2,   @%1     \n\t" // store new value
+                "1: mov     r1,   r15     \n\t" // LOGOUT
+                : "=&r" (retval),  // 0
+                  "+r"  (m)        // 1
+                : "r"   (val)      // 2
+                : "memory", "r0", "r1" );
+
+        return retval;
+}
+
+static inline unsigned long xchg_u8(volatile u8 * m, unsigned long
+ val)
+{
+       unsigned long retval;
+
+        asm volatile(
+	       "   .align  2             \n\t"
+               "   mova    1f,   r0      \n\t" // r0 = end point
+	       "   mov    r15,   r1      \n\t" // r1 = saved sp
+               "   mov    #-6,   r15     \n\t" // LOGIN
+               "   mov.b  @%1,   %0      \n\t" // load  old value
+               "   extu.b  %0,   %0      \n\t" // extend as unsigned
+               "   mov.b   %2,   @%1     \n\t" // store new value
+               "1: mov     r1,   r15     \n\t" // LOGOUT
+                : "=&r" (retval), // 0
+                  "+r"  (m)       // 1
+                : "r"   (val)     // 2
+                : "memory" , "r0", "r1");
+        return retval ;
+}
+#else
 static inline unsigned long xchg_u32(volatile u32 *m, unsigned long val)
 {
 	unsigned long flags, retval;
@@ -175,6 +223,7 @@ static inline unsigned long xchg_u8(volatile u8 *m, unsigned long val)
 	local_irq_restore(flags);
 	return retval;
 }
+#endif
 
 extern void __xchg_called_with_bad_pointer(void);
 
@@ -201,6 +250,30 @@ extern void __xchg_called_with_bad_pointer(void);
 #define xchg(ptr,x)	\
 	((__typeof__(*(ptr)))__xchg((ptr),(unsigned long)(x), sizeof(*(ptr))))
 
+#ifndef CONFIG_LTT
+#if defined(CONFIG_SH_GRB)
+static inline unsigned long __cmpxchg_u32(volatile u32 * m, unsigned long old,
+        unsigned long new)
+{
+       unsigned long retval;
+        asm volatile(
+               "   .align  2             \n\t"
+               "   mova    1f,   r0      \n\t" // r0 = end point
+               "   nop                   \n\t"
+               "   mov    r15,   r1      \n\t" // r1 = saved sp
+               "   mov    #-8,   r15     \n\t" // LOGIN
+               "   mov.l  @%1,   %0      \n\t" // load  old value
+               "   cmp/eq  %0,   %2      \n\t" //
+               "   bf            1f      \n\t" // if not equal
+               "   mov.l   %2,   @%1     \n\t" // store new value
+               "1: mov     r1,   r15     \n\t" // LOGOUT
+                : "=&r" (retval),  // 0
+                  "+r"  (m)        // 1
+                : "r"   (new)      // 2
+                : "memory" , "r0", "r1", "t");
+        return retval;
+}
+#else
 static inline unsigned long __cmpxchg_u32(volatile int * m, unsigned long old,
 	unsigned long new)
 {
@@ -214,6 +287,7 @@ static inline unsigned long __cmpxchg_u32(volatile int * m, unsigned long old,
 	local_irq_restore(flags);       /* implies memory barrier  */
 	return retval;
 }
+#endif
 
 /* This function doesn't exist, so you'll get a linker error
  * if something tries to do an invalid cmpxchg(). */
@@ -239,6 +313,20 @@ static inline unsigned long __cmpxchg(volatile void * ptr, unsigned long old,
      (__typeof__(*(ptr))) __cmpxchg((ptr), (unsigned long)_o_,		 \
 				    (unsigned long)_n_, sizeof(*(ptr))); \
   })
+#else
+#include <asm-generic/cmpxchg-local.h>
+/*
+* cmpxchg_local and cmpxchg64_local are atomic wrt current CPU. Always make
+* them available.
+*/
+#define cmpxchg_local(ptr,o,n) \
+	(__typeof__(*(ptr)))__cmpxchg_local_generic((ptr), (unsigned long)(o), \
+	(unsigned long)(n), sizeof(*(ptr)))
+#define cmpxchg64_local(ptr,o,n) __cmpxchg64_local_generic((ptr), (o), (n))
+#ifndef CONFIG_SMP
+#include <asm-generic/cmpxchg.h>
+#endif
+#endif /* CONFIG_LTT */
 
 extern void die(const char *str, struct pt_regs *regs, long err) __attribute__ ((noreturn));
 
@@ -266,6 +354,7 @@ void disable_hlt(void);
 void enable_hlt(void);
 
 void default_idle(void);
+void per_cpu_trap_init(void);
 
 asmlinkage void break_point_trap(void);
 asmlinkage void debug_trap_handler(unsigned long r4, unsigned long r5,

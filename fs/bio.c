@@ -25,7 +25,7 @@
 #include <linux/module.h>
 #include <linux/mempool.h>
 #include <linux/workqueue.h>
-#include <linux/blktrace_api.h>
+#include <linux/marker.h>
 #include <scsi/sg.h>		/* for struct sg_iovec */
 
 #define BIO_POOL_SIZE 2
@@ -1081,8 +1081,8 @@ struct bio_pair *bio_split(struct bio *bi, mempool_t *pool, int first_sectors)
 	if (!bp)
 		return bp;
 
-	blk_add_trace_pdu_int(bdev_get_queue(bi->bi_bdev), BLK_TA_SPLIT, bi,
-				bi->bi_sector + first_sectors);
+	trace_mark(blk_pdu_split, "%p %p %llu", bdev_get_queue(bi->bi_bdev), bi,
+				(u64)bi->bi_sector + first_sectors);
 
 	BUG_ON(bi->bi_vcnt != 1);
 	BUG_ON(bi->bi_idx != 0);

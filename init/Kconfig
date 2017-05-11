@@ -350,6 +350,17 @@ config CC_OPTIMIZE_FOR_SIZE
 config SYSCTL
 	bool
 
+config IMMEDIATE
+	default y if !DISABLE_IMMEDIATE
+	depends on X86_32 || X86_64 || PPC || PPC64
+	bool
+	help
+	  Immediate values are used as read-mostly variables that are rarely
+	  updated. They use code patching to modify the values inscribed in the
+	  instruction stream. It provides a way to save precious cache lines
+	  that would otherwise have to be used by these variables. They can be
+	  disabled through the EMBEDDED menu.
+
 menuconfig EMBEDDED
 	bool "Configure standard kernel features (for small systems)"
 	help
@@ -571,6 +582,16 @@ config SLOB
 
 endchoice
 
+config DISABLE_IMMEDIATE
+	default y if EMBEDDED
+	bool "Disable immediate values" if EMBEDDED
+	depends on X86_32 || X86_64 || PPC || PPC64
+	help
+	  Disable code patching based immediate values for embedded systems. It
+	  consumes slightly more memory and requires to modify the instruction
+	  stream each time a variable is updated. Should really be disabled for
+	  embedded systems with read-only text.
+
 endmenu		# General setup
 
 config RT_MUTEXES
@@ -659,6 +680,45 @@ config KMOD
 	  automatically: when a part of the kernel needs a module, it
 	  runs modprobe with the appropriate arguments, thereby
 	  loading the module if it is available.  If unsure, say Y.
+
+config LKM_ELF_HASH
+	bool "Enable ELF hash support for fast loading"
+	depends on MODULES
+	default n
+	help
+	  Extend the modules and vmlinux ELF file by adding a new section
+	  to implement the ELF hash table to be used for symbol lookup.
+	  When inserting a module, the symbol lookup process will use the
+	  ELF hash table for finding symbols. It also relies upon the support
+	  provided by the ksymhash tool to avoiding further computation at
+	  runtime of the hash values (of both exported and undefined symbols).
+	  If you enable this feature, all other external modules must be
+	  rebuilt accordingly.
+
+config MODULES_BPA2
+	bool "Allocate memory for modules from BPA2"
+	depends on MODULES && BPA2 && SUPERH
+	help
+	  Setting this option allows to allocate memory for
+	  modules from BPA2 rather than vmalloc().
+
+config MODULES_BPA2_PART_NAME
+	string "Name of BPA2 partition to allocate buffers from"
+	depends on MODULES_BPA2
+	default "modules"
+	help
+	   Define a name of BPA2 partition used for allocating module memory.
+	   As worst case, if name is not given in command line, allocation
+	   will be done through vmalloc().
+
+config MODULES_BPA2_FALLBACK
+	bool "Fallback to vmalloc if BPA2 allocation fails"
+	depends on MODULES_BPA2
+	default y
+	help
+	   Memory for the module will normally be allocated from the BPA2
+	   partition. However if this flag is set then a second attempt will
+	   be made to use vmalloc().
 
 config STOP_MACHINE
 	bool

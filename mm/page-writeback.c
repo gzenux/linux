@@ -648,7 +648,11 @@ retry:
 			 * swizzled back from swapper_space to tmpfs file
 			 * mapping
 			 */
-			lock_page(page);
+			if (wbc->skip_locked_pages) {
+				if (TestSetPageLocked(page))
+					continue;
+			} else
+				lock_page(page);
 
 			if (unlikely(page->mapping != mapping)) {
 				unlock_page(page);

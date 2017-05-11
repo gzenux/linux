@@ -15,7 +15,11 @@ OUTPUT_ARCH(sh)
 ENTRY(_start)
 SECTIONS
 {
+#ifdef CONFIG_32BIT
+  . = CONFIG_PAGE_OFFSET + CONFIG_ZERO_PAGE_OFFSET;
+#else
   . = CONFIG_PAGE_OFFSET + CONFIG_MEMORY_START + CONFIG_ZERO_PAGE_OFFSET;
+#endif
   _text = .;			/* Text and read-only data */
   text = .;			/* Text and read-only data */
   .empty_zero_page : {
@@ -26,6 +30,9 @@ SECTIONS
 	TEXT_TEXT
 	SCHED_TEXT
 	LOCK_TEXT
+#if defined(CONFIG_KPROBES)	/* KPROBE-SH */
+	KPROBES_TEXT
+#endif	/* KPROBE-SH */
 	*(.fixup)
 	*(.gnu.warning)
 	} = 0x0009
@@ -35,11 +42,27 @@ SECTIONS
   __ex_table : { *(__ex_table) }
   __stop___ex_table = .;
 
+#ifdef CONFIG_WIRELESS_RT73_FRMW
+  . = ALIGN(PAGE_SIZE);
+
+  __initrt73frmw_start = .;
+  .init.wireless : { *(.init.wireless) }
+  __initrt73frmw_end = .;
+#endif
   _etext = .;			/* End of text section */
+
+  NOTES
 
   RODATA
 
   BUG_TABLE
+
+  . = ALIGN(PAGE_SIZE);
+  /* Code which muct be executed uncached AND the associated data */
+  _start_uncached = .;
+  .uncached.text : { *(.uncached) }
+  .uncached.data : { *(.uncached.data) }
+  _end_uncached = .;
 
   .data : {			/* Data */
 	DATA_DATA
@@ -62,6 +85,8 @@ SECTIONS
   __nosave_end = .;
 
   PERCPU(PAGE_SIZE)
+
+  . = ALIGN(L1_CACHE_BYTES);
   .data.cacheline_aligned : { *(.data.cacheline_aligned) }
 
   _edata = .;			/* End of data section */
@@ -89,7 +114,14 @@ SECTIONS
   __con_initcall_end = .;
   SECURITY_INIT
 
+  /* .exit.text is discarded at runtime, not link time, to deal with
+     references from .rodata */
+  .exit.text : { *(.exit.text) }
+  .exit.data : { *(.exit.data) }
+
 #ifdef CONFIG_BLK_DEV_INITRD
+  . = ALIGN(PAGE_SIZE);
+
   __initramfs_start = .;
   .init.ramfs : { *(.init.ramfs) }
   __initramfs_end = .;
@@ -107,6 +139,7 @@ SECTIONS
   	*(.bss.page_aligned)
   	*(.bss)
 	. = ALIGN(4);
+	_ebss = .;			/* uClinux MTD sucks */
 	_end = . ;
   }
 

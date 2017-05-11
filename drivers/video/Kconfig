@@ -148,6 +148,17 @@ config FB_SVGALIB
 	  Common utility functions useful to fbdev drivers of VGA-based
 	  cards.
 
+config FB_SOFTWARE_DRAWING_HELPERS
+	tristate "Enable Software Drawing Helpers"
+	depends on FB
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	default n
+	---help---
+	  This enables the software (CFB) framebuffer drawing helpers
+	  for use by external framebuffer drivers.
+
 config FB_MACMODES
        tristate
        depends on FB
@@ -1074,7 +1085,6 @@ config FB_MATROX
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
-	select FB_TILEBLITTING
 	select FB_MACMODES if PPC_PMAC
 	---help---
 	  Say Y here if you have a Matrox Millennium, Matrox Millennium II,
@@ -1869,4 +1879,3 @@ if FB || SGI_NEWPORT_CONSOLE
 endif
 
 endmenu
-

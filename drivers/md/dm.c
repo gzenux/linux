@@ -19,7 +19,7 @@
 #include <linux/slab.h>
 #include <linux/idr.h>
 #include <linux/hdreg.h>
-#include <linux/blktrace_api.h>
+#include <linux/marker.h>
 #include <linux/smp_lock.h>
 
 #define DM_MSG_PREFIX "core"
@@ -481,8 +481,8 @@ static void dec_pending(struct dm_io *io, int error)
 			wake_up(&io->md->wait);
 
 		if (io->error != DM_ENDIO_REQUEUE) {
-			blk_add_trace_bio(io->md->queue, io->bio,
-					  BLK_TA_COMPLETE);
+			trace_mark(blk_request_complete, "%p %p",
+				io->md->queue, io->bio);
 
 			bio_endio(io->bio, io->bio->bi_size, io->error);
 		}
@@ -578,10 +578,10 @@ static void __map_bio(struct dm_target *ti, struct bio *clone,
 	r = ti->type->map(ti, clone, &tio->info);
 	if (r == DM_MAPIO_REMAPPED) {
 		/* the bio has been remapped so dispatch it */
-
-		blk_add_trace_remap(bdev_get_queue(clone->bi_bdev), clone,
-				    tio->io->bio->bi_bdev->bd_dev,
-				    clone->bi_sector, sector);
+		trace_mark(blk_remap, "%p %p %llu %llu %llu",
+			bdev_get_queue(clone->bi_bdev), clone,
+			(u64)tio->io->bio->bi_bdev->bd_dev, (u64)sector,
+			(u64)clone->bi_sector);
 
 		generic_make_request(clone);
 	} else if (r < 0 || r == DM_MAPIO_REQUEUE) {

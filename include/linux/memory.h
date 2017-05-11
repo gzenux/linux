@@ -86,4 +86,11 @@ extern int remove_memory_block(unsigned long, struct mem_section *, int);
 	register_memory_notifier(&fn##_mem_nb);			\
 }
 
+/*
+ * Take and release the kernel text modification lock, used for code patching.
+ * Users of this lock can sleep.
+ */
+extern void kernel_text_lock(void);
+extern void kernel_text_unlock(void);
+
 #endif /* _LINUX_MEMORY_H_ */

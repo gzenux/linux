@@ -1397,6 +1397,7 @@ int do_execve(char * filename,
 
 	retval = search_binary_handler(bprm,regs);
 	if (retval >= 0) {
+		trace_mark(fs_exec, "filename %s", filename);
 		/* execve success */
 		free_arg_pages(bprm);
 		security_bprm_free(bprm);

@@ -510,6 +510,7 @@ asmlinkage int printk(const char *fmt, ...)
 	int r;
 
 	va_start(args, fmt);
+	trace_mark(kernel_printk, "ip %p", __builtin_return_address(0));
 	r = vprintk(fmt, args);
 	va_end(args);
 
@@ -541,6 +542,31 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 
 	/* Emit the output into the temporary buffer */
 	printed_len = vscnprintf(printk_buf, sizeof(printk_buf), fmt, args);
+
+	if (printed_len > 0) {
+		unsigned int loglevel;
+		int mark_len;
+		char *mark_buf;
+		char saved_char;
+
+		if (printk_buf[0] == '<' && printk_buf[1] >= '0' &&
+		   printk_buf[1] <= '7' && printk_buf[2] == '>') {
+			loglevel = printk_buf[1] - '0';
+			mark_buf = &printk_buf[3];
+			mark_len = printed_len - 3;
+		} else {
+			loglevel = default_message_loglevel;
+			mark_buf = printk_buf;
+			mark_len = printed_len;
+		}
+		if (mark_buf[mark_len - 1] == '\n')
+			mark_len--;
+		saved_char = mark_buf[mark_len];
+		mark_buf[mark_len] = '\0';
+		_trace_mark(kernel_vprintk, "loglevel %c string %s ip %p",
+			loglevel, mark_buf, __builtin_return_address(0));
+		mark_buf[mark_len] = saved_char;
+	}
 
 	/*
 	 * Copy the output into log_buf.  If the caller didn't provide

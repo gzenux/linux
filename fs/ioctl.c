@@ -164,6 +164,8 @@ asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	if (!filp)
 		goto out;
 
+	trace_mark(fs_ioctl, "fd %u cmd %u arg %lu", fd, cmd, arg);
+
 	error = security_file_ioctl(filp, cmd, arg);
 	if (error)
 		goto out_fput;

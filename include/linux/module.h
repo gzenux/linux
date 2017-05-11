@@ -15,6 +15,8 @@
 #include <linux/stringify.h>
 #include <linux/kobject.h>
 #include <linux/moduleparam.h>
+#include <linux/immediate.h>
+#include <linux/marker.h>
 #include <asm/local.h>
 
 #include <asm/module.h>
@@ -33,7 +35,28 @@ struct kernel_symbol
 {
 	unsigned long value;
 	const char *name;
+#ifdef CONFIG_LKM_ELF_HASH
+	unsigned long hash_value;
+#endif
 };
+
+#ifdef CONFIG_LKM_ELF_HASH
+/*
+ * This maps the ELF hash table
+ * The entries in the .hash table always have a size of 32 bits.
+ */
+
+struct elf_htable {
+	uint32_t nbucket;
+	uint32_t nchain;
+	const uint32_t *elf_buckets;
+	const uint32_t *chains;
+};
+
+#define DECL_ELF_HTABLE(__syms)	const uint32_t *__syms##_htable;
+#else
+#define DECL_ELF_HTABLE(__syms)
+#endif
 
 struct modversion_info
 {
@@ -184,6 +207,13 @@ void *__symbol_get_gpl(const char *symbol);
 #define __CRC_SYMBOL(sym, sec)
 #endif
 
+#ifdef CONFIG_LKM_ELF_HASH
+#define MAGIC_HASH_VALUE 0x13121973
+#define KERNEL_SYMBOL_EXTRA_FIELD , MAGIC_HASH_VALUE
+#else
+#define KERNEL_SYMBOL_EXTRA_FIELD
+#endif
+
 /* For every exported symbol, place a struct in the __ksymtab section */
 #define __EXPORT_SYMBOL(sym, sec)				\
 	extern typeof(sym) sym;					\
@@ -194,7 +224,7 @@ void *__symbol_get_gpl(const char *symbol);
 	static const struct kernel_symbol __ksymtab_##sym	\
 	__attribute_used__					\
 	__attribute__((section("__ksymtab" sec), unused))	\
-	= { (unsigned long)&sym, __kstrtab_##sym }
+	= { (unsigned long)&sym, __kstrtab_##sym KERNEL_SYMBOL_EXTRA_FIELD}
 
 #define EXPORT_SYMBOL(sym)					\
 	__EXPORT_SYMBOL(sym, "")
@@ -226,7 +256,16 @@ enum module_state
 	MODULE_STATE_LIVE,
 	MODULE_STATE_COMING,
 	MODULE_STATE_GOING,
+	MODULE_STATE_GONE,
 };
+
+#ifdef CONFIG_KGDB
+#define MAX_SECTNAME 31
+struct mod_section {
+	void *address;
+	char name[MAX_SECTNAME + 1];
+};
+#endif
 
 /* Similar stuff for section attributes. */
 struct module_sect_attr
@@ -255,6 +294,13 @@ struct module
 	/* Unique handle for this module */
 	char name[MODULE_NAME_LEN];
 
+#ifdef CONFIG_KGDB
+	/* keep kgdb info at the begining so that gdb doesn't have a chance to
+	 * miss out any fields */
+	unsigned long num_sections;
+	struct mod_section *mod_sections;
+#endif
+
 	/* Sysfs stuff. */
 	struct module_kobject mkobj;
 	struct module_param_attrs *param_attrs;
@@ -266,25 +312,31 @@ struct module
 	/* Exported symbols */
 	const struct kernel_symbol *syms;
 	unsigned int num_syms;
+	DECL_ELF_HTABLE(syms);
 	const unsigned long *crcs;
 
 	/* GPL-only exported symbols. */
 	const struct kernel_symbol *gpl_syms;
 	unsigned int num_gpl_syms;
+	DECL_ELF_HTABLE(gpl_syms);
 	const unsigned long *gpl_crcs;
 
 	/* unused exported symbols. */
 	const struct kernel_symbol *unused_syms;
 	unsigned int num_unused_syms;
+	DECL_ELF_HTABLE(unused_syms);
 	const unsigned long *unused_crcs;
+
 	/* GPL-only, unused exported symbols. */
 	const struct kernel_symbol *unused_gpl_syms;
 	unsigned int num_unused_gpl_syms;
+	DECL_ELF_HTABLE(unused_gpl_syms);
 	const unsigned long *unused_gpl_crcs;
 
 	/* symbols that will be GPL-only in the near future. */
 	const struct kernel_symbol *gpl_future_syms;
 	unsigned int num_gpl_future_syms;
+	DECL_ELF_HTABLE(gpl_future_syms);
 	const unsigned long *gpl_future_crcs;
 
 	/* Exception table */
@@ -354,6 +406,14 @@ struct module
 	/* The command line arguments (may be mangled).  People like
 	   keeping pointers to this stuff */
 	char *args;
+#ifdef CONFIG_IMMEDIATE
+	const struct __immediate *immediate;
+	unsigned int num_immediate;
+#endif
+#ifdef CONFIG_MARKERS
+	struct marker *markers;
+	unsigned int num_markers;
+#endif
 };
 #ifndef MODULE_ARCH_INIT
 #define MODULE_ARCH_INIT {}
@@ -466,6 +526,13 @@ int register_module_notifier(struct notifier_block * nb);
 int unregister_module_notifier(struct notifier_block * nb);
 
 extern void print_modules(void);
+extern void list_modules(void *call_data);
+
+extern void module_update_markers(struct module *probe_module, int *refcount);
+extern int module_get_iter_markers(struct marker_iter *iter);
+
+extern void _module_immediate_update(void);
+extern void module_immediate_update(void);
 
 #else /* !CONFIG_MODULES... */
 #define EXPORT_SYMBOL(sym)
@@ -565,6 +632,24 @@ static inline int unregister_module_notifier(struct notifier_block * nb)
 #define module_put_and_exit(code) do_exit(code)
 
 static inline void print_modules(void)
+{
+}
+
+static inline void module_update_markers(struct module *probe_module,
+		int *refcount)
+{
+}
+
+static inline int module_get_iter_markers(struct marker_iter *iter)
+{
+	return 0;
+}
+
+static inline void _module_immediate_update(void)
+{
+}
+
+static inline void module_immediate_update(void)
 {
 }
 

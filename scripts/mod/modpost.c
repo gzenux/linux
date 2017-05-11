@@ -27,11 +27,10 @@ static int external_module = 0;
 static int vmlinux_section_warnings = 1;
 /* Only warn about unresolved symbols */
 static int warn_unresolved = 0;
-/* How a symbol is exported */
-enum export {
-	export_plain,      export_unused,     export_gpl,
-	export_unused_gpl, export_gpl_future, export_unknown
-};
+#ifdef CONFIG_LKM_ELF_HASH
+/* Create the ELF hash table for the vmlinux */
+static int vmlinux_hash;
+#endif
 
 void fatal(const char *fmt, ...)
 {
@@ -78,7 +77,8 @@ static int is_vmlinux(const char *modname)
 		myname = modname;
 
 	return (strcmp(myname, "vmlinux") == 0) ||
-	       (strcmp(myname, "vmlinux.o") == 0);
+	       (strcmp(myname, "vmlinux.o") == 0) ||
+	       (strcmp(myname, ".tmp_vmlinux") == 0);
 }
 
 void *do_nofail(void *ptr, const char *expr)
@@ -125,25 +125,6 @@ static struct module *new_module(char *modname)
 
 	return mod;
 }
-
-/* A hash of all exported symbols,
- * struct symbol is also used for lists of unresolved symbols */
-
-#define SYMBOL_HASH_SIZE 1024
-
-struct symbol {
-	struct symbol *next;
-	struct module *module;
-	unsigned int crc;
-	int crc_valid;
-	unsigned int weak:1;
-	unsigned int vmlinux:1;    /* 1 if symbol is defined in vmlinux */
-	unsigned int kernel:1;     /* 1 if symbol is from kernel
-				    *  (only for external modules) **/
-	unsigned int preloaded:1;  /* 1 if symbol from Module.symvers */
-	enum export  export;       /* Type of export */
-	char name[0];
-};
 
 static struct symbol *symbolhash[SYMBOL_HASH_SIZE];
 
@@ -415,7 +396,10 @@ static int parse_elf(struct elf_info *info, const char *filename)
 			info->export_unused_gpl_sec = i;
 		else if (strcmp(secname, "__ksymtab_gpl_future") == 0)
 			info->export_gpl_future_sec = i;
-
+#ifdef CONFIG_LKM_ELF_HASH
+		else if (strcmp(secname, "__ksymtab_strings") == 0)
+			info->kstrings = (void *)hdr + sechdrs[i].sh_offset;
+#endif
 		if (sechdrs[i].sh_type != SHT_SYMTAB)
 			continue;
 
@@ -1245,13 +1229,21 @@ static void read_symbols(char *modname)
 	char *version;
 	char *license;
 	struct module *mod;
-	struct elf_info info = { };
+	struct elf_info *info;
 	Elf_Sym *sym;
 
-	if (!parse_elf(&info, modname))
+	info = (struct elf_info *) malloc(sizeof(struct elf_info));
+	if (!info)
+		return;
+	memset(info, 0, sizeof(*info));
+
+	if (!parse_elf(info, modname))
 		return;
 
 	mod = new_module(modname);
+	/* FIXME: info is used only with ELF hash */
+	/* Link module to its elf info */
+	mod->info = info;
 
 	/* When there's no vmlinux, don't print warnings about
 	 * unresolved symbols (since there'll be too many ;) */
@@ -1260,7 +1252,7 @@ static void read_symbols(char *modname)
 		mod->skip = 1;
 	}
 
-	license = get_modinfo(info.modinfo, info.modinfo_len, "license");
+	license = get_modinfo(info->modinfo, info->modinfo_len, "license");
 	while (license) {
 		if (license_is_gpl_compatible(license))
 			mod->gpl_compatible = 1;
@@ -1268,31 +1260,31 @@ static void read_symbols(char *modname)
 			mod->gpl_compatible = 0;
 			break;
 		}
-		license = get_next_modinfo(info.modinfo, info.modinfo_len,
+		license = get_next_modinfo(info->modinfo, info->modinfo_len,
 					   "license", license);
 	}
 
-	for (sym = info.symtab_start; sym < info.symtab_stop; sym++) {
-		symname = info.strtab + sym->st_name;
+	for (sym = info->symtab_start; sym < info->symtab_stop; sym++) {
+		symname = info->strtab + sym->st_name;
 
-		handle_modversions(mod, &info, sym, symname);
-		handle_moddevtable(mod, &info, sym, symname);
+		handle_modversions(mod, info, sym, symname);
+		handle_moddevtable(mod, info, sym, symname);
 	}
 	if (is_vmlinux(modname) && vmlinux_section_warnings) {
-		check_sec_ref(mod, modname, &info, init_section, init_section_ref_ok);
-		check_sec_ref(mod, modname, &info, exit_section, exit_section_ref_ok);
+		check_sec_ref(mod, modname, info, init_section, init_section_ref_ok);
+		check_sec_ref(mod, modname, info, exit_section, exit_section_ref_ok);
 	}
 
-	version = get_modinfo(info.modinfo, info.modinfo_len, "version");
+	version = get_modinfo(info->modinfo, info->modinfo_len, "version");
 	if (version)
-		maybe_frob_rcs_version(modname, version, info.modinfo,
-				       version - (char *)info.hdr);
+		maybe_frob_rcs_version(modname, version, info->modinfo,
+				       version - (char *)info->hdr);
 	if (version || (all_versions && !is_vmlinux(modname)))
 		get_src_version(modname, mod->srcversion,
 				sizeof(mod->srcversion)-1);
-
-	parse_elf_finish(&info);
-
+#ifndef CONFIG_LKM_ELF_HASH
+	parse_elf_finish(info);
+#endif
 	/* Our trick to get versioning for struct_module - it's
 	 * never passed as an argument to an exported function, so
 	 * the automatic versioning doesn't pick it up, but it's really
@@ -1649,7 +1641,7 @@ int main(int argc, char **argv)
 	int opt;
 	int err;
 
-	while ((opt = getopt(argc, argv, "i:I:mso:aw")) != -1) {
+	while ((opt = getopt(argc, argv, "i:I:mso:awh")) != -1) {
 		switch(opt) {
 			case 'i':
 				kernel_read = optarg;
@@ -1673,6 +1665,11 @@ int main(int argc, char **argv)
 			case 'w':
 				warn_unresolved = 1;
 				break;
+#ifdef CONFIG_LKM_ELF_HASH
+			case 'h':
+				vmlinux_hash = 1;
+				break;
+#endif
 			default:
 				exit(1);
 		}
@@ -1695,6 +1692,16 @@ int main(int argc, char **argv)
 
 	err = 0;
 
+#ifdef CONFIG_LKM_ELF_HASH
+	/* We have asked to create the ELF hash table for a vmlinux */
+	if (vmlinux_hash && is_vmlinux(modules->name)) {
+		buf.pos = 0;
+		add_ksymtable_hash(&buf, modules);
+		sprintf(fname, "%s.mod.c", modules->name);
+		write_if_changed(&buf, fname);
+	}
+#endif
+
 	for (mod = modules; mod; mod = mod->next) {
 		if (mod->skip)
 			continue;
@@ -1706,7 +1713,12 @@ int main(int argc, char **argv)
 		add_depends(&buf, mod, modules);
 		add_moddevtable(&buf, mod);
 		add_srcversion(&buf, mod);
-
+#ifdef CONFIG_LKM_ELF_HASH
+		add_undef_hash(&buf, mod);
+		add_ksymtable_hash(&buf, mod);
+		/* Now we have done so release resources */
+		parse_elf_finish(mod->info);
+#endif
 		sprintf(fname, "%s.mod.c", mod->name);
 		write_if_changed(&buf, fname);
 	}

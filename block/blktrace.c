@@ -23,10 +23,18 @@
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
 #include <linux/time.h>
+#include <linux/marker.h>
 #include <asm/uaccess.h>
 
 static DEFINE_PER_CPU(unsigned long long, blk_trace_cpu_offset) = { 0, };
 static unsigned int blktrace_seq __read_mostly = 1;
+
+/* Global reference count of probes */
+static DEFINE_MUTEX(blk_probe_mutex);
+static int blk_probes_ref;
+
+int blk_probe_arm(void);
+void blk_probe_disarm(void);
 
 /*
  * Send out a notify message.
@@ -179,7 +187,7 @@ void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
 EXPORT_SYMBOL_GPL(__blk_add_trace);
 
 static struct dentry *blk_tree_root;
-static struct mutex blk_tree_mutex;
+static DEFINE_MUTEX(blk_tree_mutex);
 static unsigned int root_users;
 
 static inline void blk_remove_root(void)
@@ -229,6 +237,10 @@ static void blk_trace_cleanup(struct blk_trace *bt)
 	blk_remove_tree(bt->dir);
 	free_percpu(bt->sequence);
 	kfree(bt);
+	mutex_lock(&blk_probe_mutex);
+	if (--blk_probes_ref == 0)
+		blk_probe_disarm();
+	mutex_unlock(&blk_probe_mutex);
 }
 
 static int blk_trace_remove(struct request_queue *q)
@@ -385,6 +397,11 @@ static int blk_trace_setup(struct request_queue *q, struct block_device *bdev,
 		(void) xchg(&q->blk_trace, old_bt);
 		goto err;
 	}
+
+	mutex_lock(&blk_probe_mutex);
+	if (!blk_probes_ref++)
+		blk_probe_arm();
+	mutex_unlock(&blk_probe_mutex);
 
 	return 0;
 err:
@@ -549,9 +566,331 @@ static void blk_trace_set_ht_offsets(void)
 #endif
 }
 
+/**
+ * blk_add_trace_rq - Add a trace for a request oriented action
+ * Expected variable arguments :
+ * @q:		queue the io is for
+ * @rq:		the source request
+ *
+ * Description:
+ *     Records an action against a request. Will log the bio offset + size.
+ *
+ **/
+static void blk_add_trace_rq(const struct marker *mdata, void *private,
+	const char *fmt, ...)
+{
+	va_list args;
+	u32 what;
+	struct blk_trace *bt;
+	int rw;
+	struct blk_probe_data *pinfo = mdata->private;
+	struct request_queue *q;
+	struct request *rq;
+
+	va_start(args, fmt);
+	q = va_arg(args, struct request_queue *);
+	rq = va_arg(args, struct request *);
+	va_end(args);
+
+	what = pinfo->flags;
+	bt = q->blk_trace;
+	rw = rq->cmd_flags & 0x03;
+
+	if (likely(!bt))
+		return;
+
+	if (blk_pc_request(rq)) {
+		what |= BLK_TC_ACT(BLK_TC_PC);
+		__blk_add_trace(bt, 0, rq->data_len, rw, what, rq->errors, sizeof(rq->cmd), rq->cmd);
+	} else  {
+		what |= BLK_TC_ACT(BLK_TC_FS);
+		__blk_add_trace(bt, rq->hard_sector, rq->hard_nr_sectors << 9, rw, what, rq->errors, 0, NULL);
+	}
+}
+
+/**
+ * blk_add_trace_bio - Add a trace for a bio oriented action
+ * Expected variable arguments :
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ *
+ * Description:
+ *     Records an action against a bio. Will log the bio offset + size.
+ *
+ **/
+static void blk_add_trace_bio(const struct marker *mdata, void *private,
+	const char *fmt, ...)
+{
+	va_list args;
+	u32 what;
+	struct blk_trace *bt;
+	struct blk_probe_data *pinfo = mdata->private;
+	struct request_queue *q;
+	struct bio *bio;
+
+	va_start(args, fmt);
+	q = va_arg(args, struct request_queue *);
+	bio = va_arg(args, struct bio *);
+	va_end(args);
+
+	what = pinfo->flags;
+	bt = q->blk_trace;
+
+	if (likely(!bt))
+		return;
+
+	__blk_add_trace(bt, bio->bi_sector, bio->bi_size, bio->bi_rw, what, !bio_flagged(bio, BIO_UPTODATE), 0, NULL);
+}
+
+/**
+ * blk_add_trace_generic - Add a trace for a generic action
+ * Expected variable arguments :
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @rw:		the data direction
+ *
+ * Description:
+ *     Records a simple trace
+ *
+ **/
+static void blk_add_trace_generic(const struct marker *mdata, void *private,
+	const char *fmt, ...)
+{
+	va_list args;
+	struct blk_trace *bt;
+	u32 what;
+	struct blk_probe_data *pinfo = mdata->private;
+	struct request_queue *q;
+	struct bio *bio;
+	int rw;
+
+	va_start(args, fmt);
+	q = va_arg(args, struct request_queue *);
+	bio = va_arg(args, struct bio *);
+	rw = va_arg(args, int);
+	va_end(args);
+
+	what = pinfo->flags;
+	bt = q->blk_trace;
+
+	if (likely(!bt))
+		return;
+
+	if (bio)
+		blk_add_trace_bio(mdata, "%p %p", NULL, q, bio);
+	else
+		__blk_add_trace(bt, 0, 0, rw, what, 0, 0, NULL);
+}
+
+/**
+ * blk_add_trace_pdu_ll - Add a trace for a bio with any integer payload
+ * Expected variable arguments :
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @pdu:	the long long integer payload
+ *
+ **/
+static inline void blk_trace_integer(struct request_queue *q, struct bio *bio, unsigned long long pdu,
+					u32 what)
+{
+	struct blk_trace *bt;
+	__be64 rpdu;
+
+	bt = q->blk_trace;
+	rpdu = cpu_to_be64(pdu);
+
+	if (likely(!bt))
+		return;
+
+	if (bio)
+		__blk_add_trace(bt, bio->bi_sector, bio->bi_size, bio->bi_rw, what,
+					!bio_flagged(bio, BIO_UPTODATE), sizeof(rpdu), &rpdu);
+	else
+		__blk_add_trace(bt, 0, 0, 0, what, 0, sizeof(rpdu), &rpdu);
+}
+
+/**
+ * blk_add_trace_pdu_ll - Add a trace for a bio with an long long integer
+ * payload
+ * Expected variable arguments :
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @pdu:	the long long integer payload
+ *
+ * Description:
+ *     Adds a trace with some long long integer payload. This might be an unplug
+ *     option given as the action, with the depth at unplug time given as the
+ *     payload
+ *
+ **/
+static void blk_add_trace_pdu_ll(const struct marker *mdata, void *private,
+	const char *fmt, ...)
+{
+	va_list args;
+	struct blk_probe_data *pinfo = mdata->private;
+	struct request_queue *q;
+	struct bio *bio;
+	unsigned long long pdu;
+	u32 what;
+
+	what = pinfo->flags;
+
+	va_start(args, fmt);
+	q = va_arg(args, struct request_queue *);
+	bio = va_arg(args, struct bio *);
+	pdu = va_arg(args, unsigned long long);
+	va_end(args);
+
+	blk_trace_integer(q, bio, pdu, what);
+}
+
+
+/**
+ * blk_add_trace_pdu_int - Add a trace for a bio with an integer payload
+ * Expected variable arguments :
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @pdu:	the integer payload
+ *
+ * Description:
+ *     Adds a trace with some integer payload. This might be an unplug
+ *     option given as the action, with the depth at unplug time given
+ *     as the payload
+ *
+ **/
+static void blk_add_trace_pdu_int(const struct marker *mdata, void *private,
+	const char *fmt, ...)
+{
+	va_list args;
+	struct blk_probe_data *pinfo = mdata->private;
+	struct request_queue *q;
+	struct bio *bio;
+	unsigned int pdu;
+	u32 what;
+
+	what = pinfo->flags;
+
+	va_start(args, fmt);
+	q = va_arg(args, struct request_queue *);
+	bio = va_arg(args, struct bio *);
+	pdu = va_arg(args, unsigned int);
+	va_end(args);
+
+	blk_trace_integer(q, bio, pdu, what);
+}
+
+/**
+ * blk_add_trace_remap - Add a trace for a remap operation
+ * Expected variable arguments :
+ * @q:		queue the io is for
+ * @bio:	the source bio
+ * @dev:	target device
+ * @from:	source sector
+ * @to:		target sector
+ *
+ * Description:
+ *     Device mapper or raid target sometimes need to split a bio because
+ *     it spans a stripe (or similar). Add a trace for that action.
+ *
+ **/
+static void blk_add_trace_remap(const struct marker *mdata, void *private,
+	const char *fmt, ...)
+{
+	va_list args;
+	struct blk_trace *bt;
+	struct blk_io_trace_remap r;
+	u32 what;
+	struct blk_probe_data *pinfo = mdata->private;
+	struct request_queue *q;
+	struct bio *bio;
+	u64 dev, from, to;
+
+	va_start(args, fmt);
+	q = va_arg(args, struct request_queue *);
+	bio = va_arg(args, struct bio *);
+	dev = va_arg(args, u64);
+	from = va_arg(args, u64);
+	to = va_arg(args, u64);
+	va_end(args);
+
+	what = pinfo->flags;
+	bt = q->blk_trace;
+
+	if (likely(!bt))
+		return;
+
+	r.device = cpu_to_be32(dev);
+	r.device_from = cpu_to_be32(bio->bi_bdev->bd_dev);
+	r.sector = cpu_to_be64(to);
+
+	__blk_add_trace(bt, from, bio->bi_size, bio->bi_rw, BLK_TA_REMAP, !bio_flagged(bio, BIO_UPTODATE), sizeof(r), &r);
+}
+
+#define FACILITY_NAME "blk"
+
+static struct blk_probe_data probe_array[] =
+{
+	{ "blk_bio_queue", "%p %p", BLK_TA_QUEUE, blk_add_trace_bio },
+	{ "blk_bio_backmerge", "%p %p", BLK_TA_BACKMERGE, blk_add_trace_bio },
+	{ "blk_bio_frontmerge", "%p %p", BLK_TA_FRONTMERGE, blk_add_trace_bio },
+	{ "blk_get_request", "%p %p %d", BLK_TA_GETRQ, blk_add_trace_generic },
+	{ "blk_sleep_request", "%p %p %d", BLK_TA_SLEEPRQ,
+		blk_add_trace_generic },
+	{ "blk_requeue", "%p %p", BLK_TA_REQUEUE, blk_add_trace_rq },
+	{ "blk_request_issue", "%p %p", BLK_TA_ISSUE, blk_add_trace_rq },
+	{ "blk_request_complete", "%p %p", BLK_TA_COMPLETE, blk_add_trace_rq },
+	{ "blk_plug_device", "%p %p %d", BLK_TA_PLUG, blk_add_trace_generic },
+	{ "blk_pdu_unplug_io", "%p %p %d", BLK_TA_UNPLUG_IO,
+		blk_add_trace_pdu_int },
+	{ "blk_pdu_unplug_timer", "%p %p %d", BLK_TA_UNPLUG_TIMER,
+		blk_add_trace_pdu_int },
+	{ "blk_request_insert", "%p %p", BLK_TA_INSERT,
+		blk_add_trace_rq },
+	{ "blk_pdu_split", "%p %p %llu", BLK_TA_SPLIT,
+		blk_add_trace_pdu_ll },
+	{ "blk_bio_bounce", "%p %p", BLK_TA_BOUNCE, blk_add_trace_bio },
+	{ "blk_remap", "%p %p %llu %llu %llu", BLK_TA_REMAP,
+		blk_add_trace_remap },
+};
+
+
+int blk_probe_arm(void)
+{
+	int result;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(probe_array); i++) {
+		result = marker_probe_register(probe_array[i].name,
+				probe_array[i].format,
+				probe_array[i].callback, &probe_array[i]);
+		if (result)
+			printk(KERN_INFO
+				"blktrace unable to register probe %s\n",
+				probe_array[i].name);
+		result = marker_arm(probe_array[i].name);
+		if (result)
+			printk(KERN_INFO
+				"blktrace unable to arm probe %s\n",
+				probe_array[i].name);
+	}
+	return 0;
+}
+
+void blk_probe_disarm(void)
+{
+	int i, err;
+
+	for (i = 0; i < ARRAY_SIZE(probe_array); i++) {
+		err = marker_disarm(probe_array[i].name);
+		WARN_ON(err);
+		err = IS_ERR(marker_probe_unregister(probe_array[i].name));
+		WARN_ON(err);
+	}
+}
+
+
 static __init int blk_trace_init(void)
 {
-	mutex_init(&blk_tree_mutex);
 	on_each_cpu(blk_trace_check_cpu_time, NULL, 1, 1);
 	blk_trace_set_ht_offsets();
 

@@ -111,6 +111,10 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_NEED_RESCHED	2	/* rescheduling necessary */
 #define TIF_RESTORE_SIGMASK	3	/* restore signal mask in do_signal() */
 #define TIF_SINGLESTEP		4	/* singlestepping active */
+#define TIF_KERNEL_TRACE	5	/* kernel trace active */
+#define TIF_UAC_NOPRINT		6	/* Unaligned Access control flags ...*/
+#define TIF_UAC_SIGBUS		7
+#define TIF_UAC_NOFIX		8
 #define TIF_USEDFPU		16	/* FPU was used by this task this quantum (SMP) */
 #define TIF_POLLING_NRFLAG	17	/* true if poll_idle() is polling TIF_NEED_RESCHED */
 #define TIF_MEMDIE		18
@@ -121,12 +125,36 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_NEED_RESCHED	(1<<TIF_NEED_RESCHED)
 #define _TIF_RESTORE_SIGMASK	(1<<TIF_RESTORE_SIGMASK)
 #define _TIF_SINGLESTEP		(1<<TIF_SINGLESTEP)
+#define _TIF_KERNEL_TRACE	(1<<TIF_KERNEL_TRACE)
 #define _TIF_USEDFPU		(1<<TIF_USEDFPU)
 #define _TIF_POLLING_NRFLAG	(1<<TIF_POLLING_NRFLAG)
 #define _TIF_FREEZE		(1<<TIF_FREEZE)
 
-#define _TIF_WORK_MASK		0x000000FE	/* work to do on interrupt/exception return */
+#define _TIF_UAC_SIGBUS		(1<<TIF_UAC_SIGBUS)
+#define _TIF_UAC_NOPRINT	(1<<TIF_UAC_NOPRINT)
+#define _TIF_UAC_NOFIX		(1<<TIF_UAC_NOFIX)
+
+#define _TIF_WORK_MASK		0x000000DE	/* work to do on interrupt/exception return */
 #define _TIF_ALLWORK_MASK	0x000000FF	/* work to do on any return to u-space */
+
+/* PR_[GS]ET_UNALIGN prctls */
+#define SH_UAC_SHIFT		6
+#define SH_UAC_MASK		(_TIF_UAC_SIGBUS | _TIF_UAC_NOPRINT)
+
+#define SET_UNALIGN_CTL(task,value)	\
+({	\
+	task_thread_info(task)->flags =	\
+	((task_thread_info(task)->flags & ~SH_UAC_MASK)	\
+				| (((value) << SH_UAC_SHIFT) & SH_UAC_MASK));\
+	0;	\
+})
+
+#define GET_UNALIGN_CTL(task,addr)	\
+({	\
+	put_user((task_thread_info(task)->flags & SH_UAC_MASK) \
+	>> SH_UAC_SHIFT,	\
+	(int __user *) (addr));	\
+})
 
 #endif /* __KERNEL__ */
 

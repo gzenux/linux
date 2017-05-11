@@ -1560,6 +1560,16 @@ itd_link_urb (
 
 #define	ISO_ERRS (EHCI_ISOC_BUF_ERR | EHCI_ISOC_BABBLE | EHCI_ISOC_XACTERR)
 
+/* Process and recycle a completed ITD.  Return true iff its urb completed,
+ * and hence its completion callback probably added things to the hardware
+ * schedule.
+ *
+ * Note that we carefully avoid recycling this descriptor until after any
+ * completion callback runs, so that it won't be reused quickly.  That is,
+ * assuming (a) no more than two urbs per frame on this endpoint, and also
+ * (b) only this endpoint's completions submit URBs.  It seems some silicon
+ * corrupts things if you reuse completed descriptors very quickly...
+ */
 static unsigned
 itd_complete (
 	struct ehci_hcd	*ehci,
@@ -1572,6 +1582,7 @@ itd_complete (
 	int					urb_index = -1;
 	struct ehci_iso_stream			*stream = itd->stream;
 	struct usb_device			*dev;
+	unsigned				retval = false;
 
 	/* for each uframe with a packet */
 	for (uframe = 0; uframe < 8; uframe++) {
@@ -1605,15 +1616,9 @@ itd_complete (
 		}
 	}
 
-	usb_put_urb (urb);
-	itd->urb = NULL;
-	itd->stream = NULL;
-	list_move (&itd->itd_list, &stream->free_list);
-	iso_stream_put (ehci, stream);
-
 	/* handle completion now? */
 	if (likely ((urb_index + 1) != urb->number_of_packets))
-		return 0;
+		goto done;
 
 	/* ASSERT: it's really the last itd for this urb
 	list_for_each_entry (itd, &stream->td_list, itd_list)
@@ -1623,6 +1628,7 @@ itd_complete (
 	/* give urb back to the driver ... can be out-of-order */
 	dev = urb->dev;
 	ehci_urb_done (ehci, urb);
+	retval = true;
 	urb = NULL;
 
 	/* defer stopping schedule; completion can submit */
@@ -1640,8 +1646,15 @@ itd_complete (
 			(stream->bEndpointAddress & USB_DIR_IN) ? "in" : "out");
 	}
 	iso_stream_put (ehci, stream);
+	/* OK to recycle this ITD now that its completion callback ran. */
+done:
+	usb_put_urb(urb);
+	itd->urb = NULL;
+	itd->stream = NULL;
+	list_move(&itd->itd_list, &stream->free_list);
+	iso_stream_put(ehci, stream);
 
-	return 1;
+	return retval;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1938,6 +1951,16 @@ sitd_link_urb (
 #define	SITD_ERRS (SITD_STS_ERR | SITD_STS_DBE | SITD_STS_BABBLE \
 				| SITD_STS_XACT | SITD_STS_MMF)
 
+/* Process and recycle a completed SITD.  Return true iff its urb completed,
+ * and hence its completion callback probably added things to the hardware
+ * schedule.
+ *
+ * Note that we carefully avoid recycling this descriptor until after any
+ * completion callback runs, so that it won't be reused quickly.  That is,
+ * assuming (a) no more than two urbs per frame on this endpoint, and also
+ * (b) only this endpoint's completions submit URBs.  It seems some silicon
+ * corrupts things if you reuse completed descriptors very quickly...
+ */
 static unsigned
 sitd_complete (
 	struct ehci_hcd		*ehci,
@@ -1949,6 +1972,7 @@ sitd_complete (
 	int					urb_index = -1;
 	struct ehci_iso_stream			*stream = sitd->stream;
 	struct usb_device			*dev;
+	unsigned				retval = false;
 
 	urb_index = sitd->index;
 	desc = &urb->iso_frame_desc [urb_index];
@@ -1969,17 +1993,11 @@ sitd_complete (
 		desc->status = 0;
 		desc->actual_length = desc->length - SITD_LENGTH (t);
 	}
-
-	usb_put_urb (urb);
-	sitd->urb = NULL;
-	sitd->stream = NULL;
-	list_move (&sitd->sitd_list, &stream->free_list);
 	stream->depth -= stream->interval << 3;
-	iso_stream_put (ehci, stream);
 
 	/* handle completion now? */
 	if ((urb_index + 1) != urb->number_of_packets)
-		return 0;
+		goto done;
 
 	/* ASSERT: it's really the last sitd for this urb
 	list_for_each_entry (sitd, &stream->td_list, sitd_list)
@@ -1989,6 +2007,7 @@ sitd_complete (
 	/* give urb back to the driver */
 	dev = urb->dev;
 	ehci_urb_done (ehci, urb);
+	retval = true;
 	urb = NULL;
 
 	/* defer stopping schedule; completion can submit */
@@ -2006,8 +2025,15 @@ sitd_complete (
 			(stream->bEndpointAddress & USB_DIR_IN) ? "in" : "out");
 	}
 	iso_stream_put (ehci, stream);
+	/* OK to recycle this SITD now that its completion callback ran. */
+done:
+	usb_put_urb(urb);
+	sitd->urb = NULL;
+	sitd->stream = NULL;
+	list_move(&sitd->sitd_list, &stream->free_list);
+	iso_stream_put(ehci, stream);
 
-	return 1;
+	return retval;
 }
 
 

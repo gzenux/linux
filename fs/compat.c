@@ -1408,6 +1408,7 @@ int compat_do_execve(char * filename,
 
 	retval = search_binary_handler(bprm, regs);
 	if (retval >= 0) {
+		trace_mark(fs_exec, "filename %s", filename);
 		/* execve success */
 		security_bprm_free(bprm);
 		acct_update_integrals(current);

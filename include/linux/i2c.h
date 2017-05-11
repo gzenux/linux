@@ -450,13 +450,14 @@ static inline int i2c_adapter_id(struct i2c_adapter *adap)
 struct i2c_msg {
 	__u16 addr;	/* slave address			*/
 	__u16 flags;
-#define I2C_M_TEN	0x10	/* we have a ten bit chip address	*/
-#define I2C_M_RD	0x01
-#define I2C_M_NOSTART	0x4000
-#define I2C_M_REV_DIR_ADDR	0x2000
-#define I2C_M_IGNORE_NAK	0x1000
-#define I2C_M_NO_RD_ACK		0x0800
+#define I2C_M_RD		0x0001
+#define I2C_M_TEN		0x0010 /* we have a ten bit chip address */
 #define I2C_M_RECV_LEN		0x0400 /* length will be first received byte */
+#define I2C_M_NO_RD_ACK		0x0800
+#define I2C_M_IGNORE_NAK	0x1000
+#define I2C_M_REV_DIR_ADDR	0x2000
+#define I2C_M_NOSTART		0x4000
+#define I2C_M_NOREPSTART	0x8000
 	__u16 len;		/* msg length				*/
 	__u8 *buf;		/* pointer to msg data			*/
 };

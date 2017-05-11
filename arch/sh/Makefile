@@ -21,6 +21,7 @@ isa-$(CONFIG_CPU_SH3)			:= sh3
 isa-$(CONFIG_CPU_SH4)			:= sh4
 isa-$(CONFIG_CPU_SH4A)			:= sh4a
 isa-$(CONFIG_CPU_SH4AL_DSP)		:= sh4al
+isa-$(CONFIG_CPU_ST40_300)		:= st40-300
 
 isa-$(CONFIG_SH_DSP)			:= $(isa-y)-dsp
 
@@ -44,6 +45,8 @@ cflags-$(CONFIG_CPU_SH4)		:= $(call cc-option,-m4,) \
 	$(call cc-option,-mno-implicit-fp,-m4-nofpu)
 cflags-$(CONFIG_CPU_SH4A)		+= $(call cc-option,-m4a,) \
 					   $(call cc-option,-m4a-nofpu,)
+cflags-$(CONFIG_CPU_ST40_300)		+= $(call cc-option,-m4-300,) \
+					   $(call cc-option,-m4-300-nofpu,)
 
 cflags-$(CONFIG_CPU_BIG_ENDIAN)		+= -mb
 cflags-$(CONFIG_CPU_LITTLE_ENDIAN)	+= -ml
@@ -66,7 +69,7 @@ cflags-y	+= $(isaflags-y) -ffreestanding
 cflags-$(CONFIG_MORE_COMPILE_OPTIONS)	+= \
 	$(shell echo $(CONFIG_COMPILE_OPTIONS) | sed -e 's/"//g')
 
-OBJCOPYFLAGS	:= -O binary -R .note -R .comment -R .stab -R .stabstr -S
+OBJCOPYFLAGS	:= -O binary -R .note -R .note.gnu.build-id -R .comment -R .stab -R .stabstr -S
 
 #
 # arch/sh/defconfig doesn't reflect any real hardware, and as such should
@@ -118,6 +121,7 @@ machdir-$(CONFIG_SH_7751_SYSTEMH)		+= renesas/systemh
 machdir-$(CONFIG_SH_EDOSK7705)			+= renesas/edosk7705
 machdir-$(CONFIG_SH_HIGHLANDER)			+= renesas/r7780rp
 machdir-$(CONFIG_SH_7710VOIPGW)			+= renesas/sh7710voipgw
+machdir-$(CONFIG_SH_X3PROTO)			+= renesas/x3proto
 machdir-$(CONFIG_SH_SH4202_MICRODEV)		+= superh/microdev
 machdir-$(CONFIG_SH_LANDISK)			+= landisk
 machdir-$(CONFIG_SH_TITAN)			+= titan
@@ -125,17 +129,39 @@ machdir-$(CONFIG_SH_SHMIN)			+= shmin
 machdir-$(CONFIG_SH_7206_SOLUTION_ENGINE)	+= se/7206
 machdir-$(CONFIG_SH_7619_SOLUTION_ENGINE)	+= se/7619
 machdir-$(CONFIG_SH_LBOX_RE2)			+= lboxre2
+machdir-$(CONFIG_SH_MAGIC_PANEL_R2)		+= magicpanelr2
+# ST Boards
+machdir-$(CONFIG_SH_ST_CB101)			+= st/cb101
+machdir-$(CONFIG_SH_ST_CB102)			+= st/cb102
+machdir-$(CONFIG_SH_ST_CB103)			+= st/cb103
+machdir-$(CONFIG_SH_ST_HMS1)			+= st/hms1
+machdir-$(CONFIG_SH_ST_MB360)			+= st/mb360 st/common
+machdir-$(CONFIG_SH_ST_MB374)			+= st/mb374 st/common
+machdir-$(CONFIG_SH_ST_MB411)			+= st/mb411 st/common
+machdir-$(CONFIG_SH_ST_MB442)			+= st/mb442
+machdir-$(CONFIG_SH_ST_MB448)			+= st/mb448
+machdir-$(CONFIG_SH_ST_MB519)			+= st/mb519 st/common
+machdir-$(CONFIG_SH_ST_MB602)		        += st/mb602
+machdir-$(CONFIG_SH_ST_HMP7100) 		+= st/hmp7100
+machdir-$(CONFIG_SH_ST_HDREF) 			+= st/hdref
+machdir-$(CONFIG_SH_ST_MB618)			+= st/mb618 st/common
+machdir-$(CONFIG_SH_ST_MB628)			+= st/mb628 st/common
+machdir-$(CONFIG_SH_ST_MB671)			+= st/mb671 st/common
+machdir-$(CONFIG_SH_ST_MB680)			+= st/mb680 st/common
+machdir-$(CONFIG_SH_ST_MB704)			+= st/mb704
+machdir-$(CONFIG_SH_ST_PDK7105)			+= st/pdk7105
+machdir-$(CONFIG_SH_ST_MB839)			+= st/mb839
 
-incdir-y	:= $(notdir $(machdir-y))
+incdir-y	:= $(notdir $(firstword $(machdir-y)))
 
 ifneq ($(machdir-y),)
 core-y	+= $(addprefix arch/sh/boards/, \
-	     $(filter-out ., $(patsubst %,%/,$(machdir-y))))
+	     $(filter-out ., $(addsuffix /,$(machdir-y))))
 endif
 
 # Companion chips
 core-$(CONFIG_HD6446X_SERIES)	+= arch/sh/cchips/hd6446x/
-core-$(CONFIG_VOYAGERGX)	+= arch/sh/cchips/voyagergx/
+core-$(CONFIG_MFD_SM501)	+= arch/sh/cchips/voyagergx/
 
 cpuincdir-$(CONFIG_CPU_SH2)	:= cpu-sh2
 cpuincdir-$(CONFIG_CPU_SH2A)	:= cpu-sh2a

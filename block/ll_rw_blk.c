@@ -28,6 +28,7 @@
 #include <linux/task_io_accounting_ops.h>
 #include <linux/interrupt.h>
 #include <linux/cpu.h>
+#include <linux/marker.h>
 #include <linux/blktrace_api.h>
 #include <linux/fault-inject.h>
 
@@ -1564,7 +1565,7 @@ void blk_plug_device(struct request_queue *q)
 
 	if (!test_and_set_bit(QUEUE_FLAG_PLUGGED, &q->queue_flags)) {
 		mod_timer(&q->unplug_timer, jiffies + q->unplug_delay);
-		blk_add_trace_generic(q, NULL, 0, BLK_TA_PLUG);
+		trace_mark(blk_plug_device, "%p %p %d", q, NULL, 0);
 	}
 }
 
@@ -1630,7 +1631,7 @@ static void blk_backing_dev_unplug(struct backing_dev_info *bdi,
 	 * devices don't necessarily have an ->unplug_fn defined
 	 */
 	if (q->unplug_fn) {
-		blk_add_trace_pdu_int(q, BLK_TA_UNPLUG_IO, NULL,
+		trace_mark(blk_pdu_unplug_io, "%p %p %d", q, NULL,
 					q->rq.count[READ] + q->rq.count[WRITE]);
 
 		q->unplug_fn(q);
@@ -1642,7 +1643,7 @@ static void blk_unplug_work(struct work_struct *work)
 	struct request_queue *q =
 		container_of(work, struct request_queue, unplug_work);
 
-	blk_add_trace_pdu_int(q, BLK_TA_UNPLUG_IO, NULL,
+	trace_mark(blk_pdu_unplug_io, "%p %p %d", q, NULL,
 				q->rq.count[READ] + q->rq.count[WRITE]);
 
 	q->unplug_fn(q);
@@ -1652,7 +1653,7 @@ static void blk_unplug_timeout(unsigned long data)
 {
 	struct request_queue *q = (struct request_queue *)data;
 
-	blk_add_trace_pdu_int(q, BLK_TA_UNPLUG_TIMER, NULL,
+	trace_mark(blk_pdu_unplug_timer, "%p %p %d", q, NULL,
 				q->rq.count[READ] + q->rq.count[WRITE]);
 
 	kblockd_schedule_work(&q->unplug_work);
@@ -2165,7 +2166,7 @@ rq_starved:
 	
 	rq_init(q, rq);
 
-	blk_add_trace_generic(q, bio, rw, BLK_TA_GETRQ);
+	trace_mark(blk_get_request, "%p %p %d", q, bio, rw);
 out:
 	return rq;
 }
@@ -2195,7 +2196,7 @@ static struct request *get_request_wait(struct request_queue *q, int rw_flags,
 		if (!rq) {
 			struct io_context *ioc;
 
-			blk_add_trace_generic(q, bio, rw, BLK_TA_SLEEPRQ);
+			trace_mark(blk_sleep_request, "%p %p %d", q, bio, rw);
 
 			__generic_unplug_device(q);
 			spin_unlock_irq(q->queue_lock);
@@ -2269,7 +2270,7 @@ EXPORT_SYMBOL(blk_start_queueing);
  */
 void blk_requeue_request(struct request_queue *q, struct request *rq)
 {
-	blk_add_trace_rq(q, rq, BLK_TA_REQUEUE);
+	trace_mark(blk_requeue, "%p %p", q, rq);
 
 	if (blk_rq_tagged(rq))
 		blk_queue_end_tag(q, rq);
@@ -2957,7 +2958,7 @@ static int __make_request(struct request_queue *q, struct bio *bio)
 			if (!ll_back_merge_fn(q, req, bio))
 				break;
 
-			blk_add_trace_bio(q, bio, BLK_TA_BACKMERGE);
+			trace_mark(blk_bio_backmerge, "%p %p", q, bio);
 
 			req->biotail->bi_next = bio;
 			req->biotail = bio;
@@ -2974,7 +2975,7 @@ static int __make_request(struct request_queue *q, struct bio *bio)
 			if (!ll_front_merge_fn(q, req, bio))
 				break;
 
-			blk_add_trace_bio(q, bio, BLK_TA_FRONTMERGE);
+			trace_mark(blk_bio_frontmerge, "%p %p", q, bio);
 
 			bio->bi_next = req->bio;
 			req->bio = bio;
@@ -3057,9 +3058,10 @@ static inline void blk_partition_remap(struct bio *bio)
 		bio->bi_sector += p->start_sect;
 		bio->bi_bdev = bdev->bd_contains;
 
-		blk_add_trace_remap(bdev_get_queue(bio->bi_bdev), bio,
-				    bdev->bd_dev, bio->bi_sector,
-				    bio->bi_sector - p->start_sect);
+		trace_mark(blk_remap, "%p %p %llu %llu %llu",
+				    bdev_get_queue(bio->bi_bdev), bio,
+				    (u64)bdev->bd_dev, (u64)bio->bi_sector,
+				    (u64)bio->bi_sector - p->start_sect);
 	}
 }
 
@@ -3208,10 +3210,11 @@ end_io:
 		blk_partition_remap(bio);
 
 		if (old_sector != -1)
-			blk_add_trace_remap(q, bio, old_dev, bio->bi_sector, 
-					    old_sector);
+			trace_mark(blk_remap, "%p %p %llu %llu %llu",
+				q, bio, (u64)old_dev,
+				(u64)bio->bi_sector, (u64)old_sector);
 
-		blk_add_trace_bio(q, bio, BLK_TA_QUEUE);
+		trace_mark(blk_bio_queue, "%p %p", q, bio);
 
 		old_sector = bio->bi_sector;
 		old_dev = bio->bi_bdev->bd_dev;
@@ -3404,7 +3407,7 @@ static int __end_that_request_first(struct request *req, int uptodate,
 	int total_bytes, bio_nbytes, error, next_idx = 0;
 	struct bio *bio;
 
-	blk_add_trace_rq(req->q, req, BLK_TA_COMPLETE);
+	trace_mark(blk_request_complete, "%p %p", req->q, req);
 
 	/*
 	 * extend uptodate bool to allow < 0 value to be direct io error

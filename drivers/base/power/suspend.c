@@ -81,6 +81,13 @@ int suspend_device(struct device * dev, pm_message_t state)
 		error = dev->bus->suspend(dev, state);
 		suspend_report_result(dev->bus->suspend, error);
 	}
+/*
+ *	STMicroelectronics: <francesco virlinzi>
+ *	- added to have a 'power state' for each device
+ */
+	if (!error)
+		dev->power.power_state = state;
+
 	up(&dev->sem);
 	return error;
 }

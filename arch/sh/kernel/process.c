@@ -19,11 +19,13 @@
 #include <linux/tick.h>
 #include <linux/reboot.h>
 #include <linux/fs.h>
+#include <linux/preempt.h>
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
 #include <asm/system.h>
 #include <asm/ubc.h>
+#include <asm/watchdog.h>
 
 static int hlt_counter;
 int ubc_usercnt = 0;
@@ -79,7 +81,7 @@ void cpu_idle(void)
 
 	/* endless idle loop with no priority at all */
 	while (1) {
-		void (*idle)(void) = pm_idle;
+		void (*idle) (void) = pm_idle;
 
 		if (!idle)
 			idle = default_idle;
@@ -96,11 +98,18 @@ void cpu_idle(void)
 	}
 }
 
-void machine_restart(char * __unused)
+static void watchdog_trigger_immediate(void)
 {
-	/* SR.BL=1 and invoke address error to let CPU reset (manual reset) */
-	asm volatile("ldc %0, sr\n\t"
-		     "mov.l @%1, %0" : : "r" (0x10000000), "r" (0x80000001));
+	sh_wdt_write_cnt(0xFF);
+	sh_wdt_write_csr(0xC2);
+}
+
+void machine_restart(char *__unused)
+{
+	/* Use watchdog timer to trigger reset */
+	local_irq_disable();
+	watchdog_trigger_immediate();
+	while (1) {};
 }
 
 void machine_halt(void)
@@ -117,7 +126,7 @@ void machine_power_off(void)
 		pm_power_off();
 }
 
-void show_regs(struct pt_regs * regs)
+void show_regs(struct pt_regs *regs)
 {
 	printk("\n");
 	printk("Pid : %d, Comm: %20s\n", current->pid, current->comm);
@@ -132,17 +141,13 @@ void show_regs(struct pt_regs * regs)
 	printk("%s\n", print_tainted());
 
 	printk("R0  : %08lx R1  : %08lx R2  : %08lx R3  : %08lx\n",
-	       regs->regs[0],regs->regs[1],
-	       regs->regs[2],regs->regs[3]);
+	       regs->regs[0], regs->regs[1], regs->regs[2], regs->regs[3]);
 	printk("R4  : %08lx R5  : %08lx R6  : %08lx R7  : %08lx\n",
-	       regs->regs[4],regs->regs[5],
-	       regs->regs[6],regs->regs[7]);
+	       regs->regs[4], regs->regs[5], regs->regs[6], regs->regs[7]);
 	printk("R8  : %08lx R9  : %08lx R10 : %08lx R11 : %08lx\n",
-	       regs->regs[8],regs->regs[9],
-	       regs->regs[10],regs->regs[11]);
+	       regs->regs[8], regs->regs[9], regs->regs[10], regs->regs[11]);
 	printk("R12 : %08lx R13 : %08lx R14 : %08lx\n",
-	       regs->regs[12],regs->regs[13],
-	       regs->regs[14]);
+	       regs->regs[12], regs->regs[13], regs->regs[14]);
 	printk("MACH: %08lx MACL: %08lx GBR : %08lx PR  : %08lx\n",
 	       regs->mach, regs->macl, regs->gbr, regs->pr);
 
@@ -171,6 +176,7 @@ __asm__(".align 5\n"
 /* Don't use this in BL=1(cli).  Or else, CPU resets! */
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 {
+	unsigned long pid;
 	struct pt_regs regs;
 
 	memset(&regs, 0, sizeof(regs));
@@ -181,8 +187,10 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 	regs.sr = (1 << 30);
 
 	/* Ok, create the new process.. */
-	return do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0,
+	pid =  do_fork(flags | CLONE_VM | CLONE_UNTRACED, 0,
 		       &regs, 0, NULL, NULL);
+	trace_mark(kernel_arch_kthread_create, "pid %ld fn %p", pid, fn);
+	return pid;
 }
 
 /*
@@ -212,7 +220,7 @@ void release_thread(struct task_struct *dead_task)
 }
 
 /* Fill in the fpu structure for a core dump.. */
-int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpu)
+int dump_fpu(struct pt_regs *regs, elf_fpregset_t * fpu)
 {
 	int fpvalid = 0;
 
@@ -324,7 +332,7 @@ static void ubc_set_tracing(int asid, unsigned long pc)
 	ctrl_outb(asid, UBC_BASRA);
 #endif
 
-	ctrl_outl(0, UBC_BAMRA);
+	ctrl_outb(0, UBC_BAMRA);
 
 	if (current_cpu_data.type == CPU_SH7729 ||
 	    current_cpu_data.type == CPU_SH7710 ||
@@ -347,26 +355,6 @@ struct task_struct *__switch_to(struct task_struct *prev,
 {
 #if defined(CONFIG_SH_FPU)
 	unlazy_fpu(prev, task_pt_regs(prev));
-#endif
-
-#ifdef CONFIG_PREEMPT
-	{
-		unsigned long flags;
-		struct pt_regs *regs;
-
-		local_irq_save(flags);
-		regs = task_pt_regs(prev);
-		if (user_mode(regs) && regs->regs[15] >= 0xc0000000) {
-			int offset = (int)regs->regs[15];
-
-			/* Reset stack pointer: clear critical region mark */
-			regs->regs[15] = regs->regs[1];
-			if (regs->pc < regs->regs[0])
-				/* Go to rewind point */
-				regs->pc = regs->regs[0] + offset;
-		}
-		local_irq_restore(flags);
-	}
 #endif
 
 #ifdef CONFIG_MMU

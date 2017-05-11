@@ -58,6 +58,7 @@
 #include <linux/times.h>
 #include <linux/tsacct_kern.h>
 #include <linux/kprobes.h>
+#include <linux/kgdb.h>
 #include <linux/delayacct.h>
 #include <linux/reciprocal_div.h>
 #include <linux/unistd.h>
@@ -1435,6 +1436,8 @@ static int try_to_wake_up(struct task_struct *p, unsigned int state, int sync)
 #endif
 
 	rq = task_rq_lock(p, &flags);
+	trace_mark(kernel_sched_try_wakeup, "pid %d state %ld",
+		p->pid, p->state);
 	old_state = p->state;
 	if (!(old_state & state))
 		goto out;
@@ -1676,6 +1679,8 @@ void fastcall wake_up_new_task(struct task_struct *p, unsigned long clone_flags)
 	int this_cpu;
 
 	rq = task_rq_lock(p, &flags);
+	trace_mark(kernel_sched_wakeup_new_task, "pid %d state %ld",
+		p->pid, p->state);
 	BUG_ON(p->state != TASK_RUNNING);
 	this_cpu = smp_processor_id(); /* parent's CPU */
 	update_rq_clock(rq);
@@ -1863,6 +1868,9 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	struct mm_struct *mm, *oldmm;
 
 	prepare_task_switch(rq, prev, next);
+	trace_mark(kernel_sched_schedule,
+		"prev_pid %d next_pid %d prev_state %ld",
+		prev->pid, next->pid, prev->state);
 	mm = next->mm;
 	oldmm = prev->active_mm;
 	/*
@@ -2117,6 +2125,8 @@ static void sched_migrate_task(struct task_struct *p, int dest_cpu)
 	    || unlikely(cpu_is_offline(dest_cpu)))
 		goto out;
 
+	trace_mark(kernel_sched_migrate_task, "pid %d state %ld dest_cpu %d",
+		p->pid, p->state, dest_cpu);
 	/* force the process onto the specified CPU */
 	if (migrate_task(p, dest_cpu, &req)) {
 		/* Need to wait for migration thread (might exit: take ref). */
@@ -6613,6 +6623,9 @@ void __might_sleep(char *file, int line)
 #ifdef in_atomic
 	static unsigned long prev_jiffy;	/* ratelimiting */
 
+	if (atomic_read(&debugger_active))
+		return;
+
 	if ((in_atomic() || irqs_disabled()) &&
 	    system_state == SYSTEM_RUNNING && !oops_in_progress) {
 		if (time_before(jiffies, prev_jiffy + HZ) && prev_jiffy)
@@ -6739,3 +6752,45 @@ void set_curr_task(int cpu, struct task_struct *p)
 }
 
 #endif
+
+/**
+ * clear_kernel_trace_flag_all_tasks - clears all TIF_KERNEL_TRACE thread flags.
+ *
+ * This function iterates on all threads in the system to clear their
+ * TIF_KERNEL_TRACE flag. Setting the TIF_KERNEL_TRACE flag with the
+ * tasklist_lock held in copy_process() makes sure that once we finish clearing
+ * the thread flags, all threads have their flags cleared.
+ */
+void clear_kernel_trace_flag_all_tasks(void)
+{
+	struct task_struct *p;
+	struct task_struct *t;
+
+	read_lock(&tasklist_lock);
+	do_each_thread(p, t) {
+		clear_tsk_thread_flag(t, TIF_KERNEL_TRACE);
+	} while_each_thread(p, t);
+	read_unlock(&tasklist_lock);
+}
+EXPORT_SYMBOL_GPL(clear_kernel_trace_flag_all_tasks);
+
+/**
+ * set_kernel_trace_flag_all_tasks - sets all TIF_KERNEL_TRACE thread flags.
+ *
+ * This function iterates on all threads in the system to set their
+ * TIF_KERNEL_TRACE flag. Setting the TIF_KERNEL_TRACE flag with the
+ * tasklist_lock held in copy_process() makes sure that once we finish setting
+ * the thread flags, all threads have their flags set.
+ */
+void set_kernel_trace_flag_all_tasks(void)
+{
+	struct task_struct *p;
+	struct task_struct *t;
+
+	read_lock(&tasklist_lock);
+	do_each_thread(p, t) {
+		set_tsk_thread_flag(t, TIF_KERNEL_TRACE);
+	} while_each_thread(p, t);
+	read_unlock(&tasklist_lock);
+}
+EXPORT_SYMBOL_GPL(set_kernel_trace_flag_all_tasks);

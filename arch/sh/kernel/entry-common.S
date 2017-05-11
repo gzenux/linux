@@ -95,6 +95,7 @@ ENTRY(ret_from_irq)
 	bra	resume_userspace
 	 nop
 ENTRY(resume_kernel)
+	cli
 	mov.l	@(TI_PRE_COUNT,r8), r0	! current_thread_info->preempt_count
 	tst	r0, r0
 	bf	noresched
@@ -108,28 +109,9 @@ need_resched:
 	and	#0xf0, r0		! interrupts off (exception path)?
 	cmp/eq	#0xf0, r0
 	bt	noresched
-
-	mov.l	1f, r0
-	mov.l	r0, @(TI_PRE_COUNT,r8)
-
-#ifdef CONFIG_TRACE_IRQFLAGS
 	mov.l	3f, r0
-	jsr	@r0
+	jsr	@r0			! call preempt_schedule_irq
 	 nop
-#endif
-	sti
-	mov.l	2f, r0
-	jsr	@r0
-	 nop
-	mov	#0, r0
-	mov.l	r0, @(TI_PRE_COUNT,r8)
-	cli
-#ifdef CONFIG_TRACE_IRQFLAGS
-	mov.l	4f, r0
-	jsr	@r0
-	 nop
-#endif
-
 	bra	need_resched
 	 nop
 
@@ -140,10 +122,7 @@ noresched:
 	.align 2
 1:	.long	PREEMPT_ACTIVE
 2:	.long	schedule
-#ifdef CONFIG_TRACE_IRQFLAGS
-3:	.long	trace_hardirqs_on
-4:	.long	trace_hardirqs_off
-#endif
+3:	.long	preempt_schedule_irq
 #endif
 
 ENTRY(resume_userspace)
@@ -176,25 +155,6 @@ work_notifysig:
 	jmp	@r1
 	 lds	r0, pr
 work_resched:
-#ifndef CONFIG_PREEMPT
-	! gUSA handling
-	mov.l	@(OFF_SP,r15), r0	! get user space stack pointer
-	mov	r0, r1
-	shll	r0
-	bf/s	1f
-	 shll	r0
-	bf/s	1f
-	 mov	#OFF_PC, r0
-	! 				  SP >= 0xc0000000 : gUSA mark
-	mov.l	@(r0,r15), r2		! get user space PC (program counter)
-	mov.l	@(OFF_R0,r15), r3	! end point
-	cmp/hs	r3, r2			! r2 >= r3? 
-	bt	1f
-	add	r3, r1			! rewind point #2
-	mov.l	r1, @(r0,r15)		! reset PC to rewind point #2
-	!
-1:
-#endif
 	mov.l	1f, r1
 	jsr	@r1				! schedule
 	 nop
@@ -214,7 +174,7 @@ work_resched:
 	.align	2
 1:	.long	schedule
 2:	.long	do_notify_resume
-3:	.long	restore_all
+3:	.long	resume_userspace
 #ifdef CONFIG_TRACE_IRQFLAGS
 4:	.long	trace_hardirqs_on
 5:	.long	trace_hardirqs_off
@@ -224,7 +184,7 @@ work_resched:
 syscall_exit_work:
 	! r0: current_thread_info->flags
 	! r8: current_thread_info
-	tst	#_TIF_SYSCALL_TRACE | _TIF_SINGLESTEP, r0
+	tst	#_TIF_SYSCALL_TRACE | _TIF_SINGLESTEP | _TIF_KERNEL_TRACE, r0
 	bt/s	work_pending
 	 tst	#_TIF_NEED_RESCHED, r0
 #ifdef CONFIG_TRACE_IRQFLAGS
@@ -233,7 +193,8 @@ syscall_exit_work:
 	 nop
 #endif
 	sti
-	! XXX setup arguments...
+	mov	r15,r4			! pass stacked regs as arg
+	mov	#0, r5			! trace entry [0]
 	mov.l	4f, r0			! do_syscall_trace
 	jsr	@r0
 	 nop
@@ -243,7 +204,8 @@ syscall_exit_work:
 	.align	2
 syscall_trace_entry:
 	!                     	Yes it is traced.
-	! XXX setup arguments...
+	mov	r15,r4		! pass stacked regs as arg
+	mov	#1, r5		! trace entry [1]
 	mov.l	4f, r11		! Call do_syscall_trace which notifies
 	jsr	@r11	    	! superior (will chomp R[0-7])
 	 nop
@@ -277,6 +239,7 @@ __restore_all:
 
 	.align	2
 syscall_badsys:			! Bad syscall number
+	get_current_thread_info r8, r0
 	mov	#-ENOSYS, r0
 	bra	resume_userspace
 	 mov.l	r0, @(OFF_R0,r15)	! Return value
@@ -297,7 +260,7 @@ debug_trap:
 	add	r0, r8
 	mov.l	@r8, r8
 	jmp	@r8
-	 nop
+	 mov	r15, r4 /* Jump to kgdb, pass stacked regs as arg */
 
 	.align	2
 1:	.long	debug_trap_table
@@ -366,7 +329,7 @@ ENTRY(system_call)
 	!
 	get_current_thread_info r8, r10
 	mov.l	@(TI_FLAGS,r8), r8
-	mov	#_TIF_SYSCALL_TRACE, r10
+	mov	#(_TIF_SYSCALL_TRACE | _TIF_KERNEL_TRACE), r10
 	tst	r10, r8
 	bf	syscall_trace_entry
 	!
@@ -398,6 +361,7 @@ syscall_exit:
 	bf	syscall_exit_work
 	bra	__restore_all
 	 nop
+ret_from_exception_end:
 	.align	2
 #if !defined(CONFIG_CPU_SH2)
 1:	.long	TRA
@@ -409,3 +373,73 @@ syscall_exit:
 5:	.long	trace_hardirqs_on
 6:	.long	trace_hardirqs_off
 #endif
+
+	.section	.debug_frame,"",@progbits
+.LCIE:
+	.ualong	.LCIE_end - .LCIE_start
+.LCIE_start:
+	.ualong	0xffffffff	/* CIE ID */
+	.byte	0x1		/* Version number */
+	.string	""		/* NUL-terminated augmentation string */
+	.uleb128 0x1		/* Code alignment factor */
+	.sleb128 -4		/* Data alignment factor */
+	.byte	0x11		/* Return address register column */
+				/* Augmentation length and data (none) */
+	.byte	0xc		/* DW_CFA_def_cfa */
+	.uleb128 0xf		/* r15 */
+	.uleb128 0x0		/* offset 0 */
+
+	.align 2
+.LCIE_end:
+
+	.ualong	.LFDE_end-.LFDE_start	/* Length FDE */
+.LFDE_start:
+	.ualong	.LCIE			/* CIE pointer */
+	.ualong	ret_from_exception-4	/* absolute start address */
+	.ualong	ret_from_exception_end-(ret_from_exception-4)
+					/* length */
+	.byte	0x4			/* DW_CFA_advance_loc4 */
+	.ualong	0			/*   by */
+	.byte	0xe			/* DW_CFA_def_cfa_offset */
+	.uleb128 OFF_TRA+4		/*   advance CFA by sizeof(ptregs)+4 */
+
+	.byte	0x80+0			/* DW_CFA_offset r0 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(0*4)))>>2
+	.byte	0x80+1			/* DW_CFA_offset r1 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(1*4)))>>2
+	.byte	0x80+2			/* DW_CFA_offset r2 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(2*4)))>>2
+	.byte	0x80+3			/* DW_CFA_offset r3 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(3*4)))>>2
+	.byte	0x80+4			/* DW_CFA_offset r4 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(4*4)))>>2
+	.byte	0x80+5			/* DW_CFA_offset r5 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(5*4)))>>2
+	.byte	0x80+6			/* DW_CFA_offset r6 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(6*4)))>>2
+	.byte	0x80+7			/* DW_CFA_offset r7 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(7*4)))>>2
+	.byte	0x80+8			/* DW_CFA_offset r8 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(8*4)))>>2
+	.byte	0x80+9			/* DW_CFA_offset r9 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(9*4)))>>2
+	.byte	0x80+10			/* DW_CFA_offset r10 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(10*4)))>>2
+	.byte	0x80+11			/* DW_CFA_offset r11 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(11*4)))>>2
+	.byte	0x80+12			/* DW_CFA_offset r12 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(12*4)))>>2
+	.byte	0x80+13			/* DW_CFA_offset r13 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(13*4)))>>2
+	.byte	0x80+14			/* DW_CFA_offset r14 */
+	.uleb128 ((OFF_TRA+4)-(OFF_R0+(14*4)))>>2
+	.byte	0x80+15			/* DW_CFA_offset r15 */
+	.uleb128 ((OFF_TRA+4)-OFF_SP)>>2
+	.byte	0x80+16			/* DW_CFA_offset r16=pc */
+	.uleb128 ((OFF_TRA+4)-OFF_PC)>>2
+	.byte	0x80+17			/* DW_CFA_offset r17=pr */
+	.uleb128 ((OFF_TRA+4)-OFF_PR)>>2
+	.align 2
+.LFDE_end:
+
+	.previous

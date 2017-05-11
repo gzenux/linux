@@ -46,13 +46,13 @@
  * fix-mapped?
  */
 enum fixed_addresses {
-#define FIX_N_COLOURS 16
-	FIX_CMAP_BEGIN,
-	FIX_CMAP_END = FIX_CMAP_BEGIN + FIX_N_COLOURS,
 #ifdef CONFIG_HIGHMEM
 	FIX_KMAP_BEGIN,	/* reserved pte's for temporary kernel mappings */
 	FIX_KMAP_END = FIX_KMAP_BEGIN+(KM_TYPE_NR*NR_CPUS)-1,
 #endif
+	FIX_UNCACHED_CODE,
+	FIX_SYSCONF,
+	FIX_ASC,
 	__end_of_fixed_addresses
 };
 

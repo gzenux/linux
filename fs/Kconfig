@@ -1303,6 +1303,17 @@ config JFFS2_ZLIB
 
           Say 'Y' if unsure.
 
+config JFFS2_LZO
+	bool "JFFS2 LZO compression support" if JFFS2_COMPRESSION_OPTIONS
+	select LZO_COMPRESS
+	select LZO_DECOMPRESS
+	depends on JFFS2_FS
+	default y
+	help
+	  minilzo-based compression. Generally works better than Zlib.
+
+	  Say 'Y' if unsure.
+
 config JFFS2_RTIME
 	bool "JFFS2 RTIME compression support" if JFFS2_COMPRESSION_OPTIONS
 	depends on JFFS2_FS
@@ -1342,7 +1353,17 @@ config JFFS2_CMODE_SIZE
           Tries all compressors and chooses the one which has the smallest
           result.
 
+config JFFS2_CMODE_FAVOURLZO
+	bool "Favour LZO"
+	help
+	  Tries all compressors and chooses the one which has the smallest
+	  result but gives some preference to LZO (which has faster
+	  decompression) at the expense of size.
+
 endchoice
+
+# UBIFS File system configuration
+source "fs/ubifs/Kconfig"
 
 config CRAMFS
 	tristate "Compressed ROM file system support (cramfs)"
@@ -1363,6 +1384,56 @@ config CRAMFS
 	  directory /) cannot be compiled as a module.
 
 	  If unsure, say N.
+
+config SQUASHFS
+	tristate "SquashFS 3.3 - Squashed file system support"
+	select ZLIB_INFLATE
+	help
+	  Saying Y here includes support for SquashFS 3.3 (a Compressed
+	  Read-Only File System).  Squashfs is a highly compressed read-only
+	  filesystem for Linux.  It uses zlib compression to compress both
+	  files, inodes and directories.  Inodes in the system are very small
+	  and all blocks are packed to minimise data overhead. Block sizes
+	  greater than 4K are supported up to a maximum of 1 Mbytes (default
+	  block size 128K).  SquashFS 3.3 supports 64 bit filesystems and files
+	  (larger than 4GB), full uid/gid information, hard links and timestamps.  
+
+	  Squashfs is intended for general read-only filesystem use, for
+	  archival use (i.e. in cases where a .tar.gz file may be used), and in
+	  embedded systems where low overhead is needed.  Further information
+	  and filesystem tools are available from http://squashfs.sourceforge.net.
+
+	  If you want to compile this as a module ( = code which can be
+	  inserted in and removed from the running kernel whenever you want),
+	  say M here and read <file:Documentation/modules.txt>.  The module
+	  will be called squashfs.  Note that the root file system (the one
+	  containing the directory /) cannot be compiled as a module.
+
+	  If unsure, say N.
+
+config SQUASHFS_EMBEDDED
+
+	bool "Additional option for memory-constrained systems" 
+	depends on SQUASHFS
+	default n
+	help
+	  Saying Y here allows you to specify cache size.
+
+	  If unsure, say N.
+
+config SQUASHFS_FRAGMENT_CACHE_SIZE
+	int "Number of fragments cached" if SQUASHFS_EMBEDDED
+	depends on SQUASHFS
+	default "3"
+	help
+	  By default SquashFS caches the last 3 fragments read from
+	  the filesystem.  Increasing this amount may mean SquashFS
+	  has to re-read fragments less often from disk, at the expense
+	  of extra system memory.  Decreasing this amount will mean
+	  SquashFS uses less memory at the expense of extra reads from disk.
+
+	  Note there must be at least one cached fragment.  Anything
+	  much more than three will probably not make much difference.
 
 config VXFS_FS
 	tristate "FreeVxFS file system support (VERITAS VxFS(TM) compatible)"

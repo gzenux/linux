@@ -664,6 +664,8 @@ static int send_signal(int sig, struct siginfo *info, struct task_struct *t,
 	struct sigqueue * q = NULL;
 	int ret = 0;
 
+	trace_mark(kernel_send_signal, "pid %d signal %d", t->pid, sig);
+
 	/*
 	 * Deliver the signal to listening signalfds. This must be called
 	 * with the sighand lock held.

@@ -44,6 +44,12 @@ int resume_device(struct device * dev)
 		error = dev->class->resume(dev);
 	}
 
+/*
+ *	STMicroelectronics: <francesco virlinzi>
+ *	- added to have a 'power state' for each device
+ */
+	if (!error)
+		dev->power.power_state = PMSG_ON;
 	up(&dev->sem);
 
 	TRACE_RESUME(error);

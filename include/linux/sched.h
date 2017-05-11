@@ -1881,6 +1881,9 @@ static inline void inc_syscw(struct task_struct *tsk)
 }
 #endif
 
+extern void clear_kernel_trace_flag_all_tasks(void);
+extern void set_kernel_trace_flag_all_tasks(void);
+
 #endif /* __KERNEL__ */
 
 #endif

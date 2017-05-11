@@ -630,6 +630,8 @@ config HVCS
 	  which will also be compiled when this driver is built as a
 	  module.
 
+source "drivers/char/lirc/Kconfig"
+
 source "drivers/char/ipmi/Kconfig"
 
 source "drivers/char/watchdog/Kconfig"
@@ -1063,6 +1065,12 @@ config DEVPORT
 	default y
 
 source "drivers/s390/char/Kconfig"
+
+#KPROBE-SH
+config KPROBE_EXAMPLE
+        tristate "kprobe example"
+	depends on KPROBES
+#KPROBE-SH
 
 endmenu
 

@@ -1297,22 +1297,21 @@ int skb_checksum_help(struct sk_buff *skb)
 		goto out_set_summed;
 	}
 
-	if (skb_cloned(skb)) {
+	offset = skb->csum_start - skb_headroom(skb);
+	BUG_ON(offset >= skb_headlen(skb));
+	csum = skb_checksum(skb, offset, skb->len - offset, 0);
+
+	offset += skb->csum_offset;
+	BUG_ON(offset + sizeof(__sum16) > skb_headlen(skb));
+
+	if (skb_cloned(skb) &&
+	    !skb_clone_writable(skb, offset + sizeof(__sum16))) {
 		ret = pskb_expand_head(skb, 0, 0, GFP_ATOMIC);
 		if (ret)
 			goto out;
 	}
 
-	offset = skb->csum_start - skb_headroom(skb);
-	BUG_ON(offset > (int)skb->len);
-	csum = skb_checksum(skb, offset, skb->len-offset, 0);
-
-	offset = skb_headlen(skb) - offset;
-	BUG_ON(offset <= 0);
-	BUG_ON(skb->csum_offset + 2 > offset);
-
-	*(__sum16 *)(skb->head + skb->csum_start + skb->csum_offset) =
-		csum_fold(csum);
+	*(__sum16 *)(skb->data + offset) = csum_fold(csum);
 out_set_summed:
 	skb->ip_summed = CHECKSUM_NONE;
 out:
@@ -1580,6 +1579,8 @@ int dev_queue_xmit(struct sk_buff *skb)
 	}
 
 gso:
+	trace_mark(net_dev_xmit, "skb %p protocol #2u%hu", skb, skb->protocol);
+
 	spin_lock_prefetch(&dev->queue_lock);
 
 	/* Disable soft irqs for various locks below. Also
@@ -1942,6 +1943,9 @@ int netif_receive_skb(struct sk_buff *skb)
 		return NET_RX_DROP;
 
 	__get_cpu_var(netdev_rx_stat).total++;
+
+	trace_mark(net_dev_receive, "skb %p protocol #2u%hu",
+		skb, skb->protocol);
 
 	skb_reset_network_header(skb);
 	skb_reset_transport_header(skb);
@@ -3049,7 +3053,7 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 			return -EOPNOTSUPP;
 
 		case SIOCADDMULTI:
-			if (!dev->set_multicast_list ||
+			if ((!dev->set_multicast_list && !dev->set_rx_mode) ||
 			    ifr->ifr_hwaddr.sa_family != AF_UNSPEC)
 				return -EINVAL;
 			if (!netif_device_present(dev))
@@ -3058,7 +3062,7 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 					  dev->addr_len, 1);
 
 		case SIOCDELMULTI:
-			if (!dev->set_multicast_list ||
+			if ((!dev->set_multicast_list && !dev->set_rx_mode) ||
 			    ifr->ifr_hwaddr.sa_family != AF_UNSPEC)
 				return -EINVAL;
 			if (!netif_device_present(dev))

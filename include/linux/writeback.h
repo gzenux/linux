@@ -61,6 +61,7 @@ struct writeback_control {
 	unsigned for_reclaim:1;		/* Invoked from the page allocator */
 	unsigned for_writepages:1;	/* This is a writepages() call */
 	unsigned range_cyclic:1;	/* range_start is cyclic */
+	unsigned skip_locked_pages:1;	/* Do not sleep on locked dirty pages */
 
 	void *fs_private;		/* For use by ->writepages() */
 };
@@ -72,6 +73,7 @@ void writeback_inodes(struct writeback_control *wbc);
 void wake_up_inode(struct inode *inode);
 int inode_wait(void *);
 void sync_inodes_sb(struct super_block *, int wait);
+void writeback_inodes_sb(struct super_block *sb, struct writeback_control *wbc);
 void sync_inodes(int wait);
 
 /* writeback.h requires fs.h; it, too, is not included from here. */

@@ -223,6 +223,13 @@ static int ehci_reset (struct ehci_hcd *ehci)
 	retval = handshake (ehci, &ehci->regs->command,
 			    CMD_RESET, 0, 250 * 1000);
 
+	/*
+	 * Some host controller doesn't deassert the reset bit
+	 */
+	if (retval == -ETIMEDOUT && ehci_has_reset_portno_bug(ehci)) {
+		ehci_writel(ehci, command & ~CMD_RESET, &ehci->regs->command);
+		retval = 0;
+	}
 	if (retval)
 		return retval;
 
@@ -948,6 +955,11 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_SOC_AU1200
 #include "ehci-au1xxx.c"
 #define	PLATFORM_DRIVER		ehci_hcd_au1xxx_driver
+#endif
+
+#if defined(CONFIG_USB_STM_COMMON) || defined(CONFIG_USB_STM_COMMON_MODULE)
+#include "ehci-stcore.c"
+#define	PLATFORM_DRIVER		ehci_hcd_stm_driver
 #endif
 
 #ifdef CONFIG_PPC_PS3

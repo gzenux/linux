@@ -22,6 +22,7 @@
 #include <linux/mm.h>
 #include <linux/kexec.h>
 #include <linux/module.h>
+#include <linux/smp.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/page.h>
@@ -31,18 +32,18 @@
 #include <asm/clock.h>
 #include <asm/mmu_context.h>
 
-extern void * __rd_start, * __rd_end;
-
-/*
- * Machine setup..
- */
-
 /*
  * Initialize loops_per_jiffy as 10000000 (1000MIPS).
  * This value will be used at the very early stage of serial setup.
  * The bigger value means no problem.
  */
-struct sh_cpuinfo boot_cpu_data = { CPU_SH_NONE, 10000000, };
+struct sh_cpuinfo cpu_data[NR_CPUS] __read_mostly = {
+	[0] = {
+		.type			= CPU_SH_NONE,
+		.loops_per_jiffy	= 10000000,
+	},
+};
+EXPORT_SYMBOL(cpu_data);
 
 /*
  * The machine vector. First entry in .machvec.init, or clobbered by
@@ -76,8 +77,18 @@ extern int root_mountflags;
 
 static char __initdata command_line[COMMAND_LINE_SIZE] = { 0, };
 
-static struct resource code_resource = { .name = "Kernel code", };
-static struct resource data_resource = { .name = "Kernel data", };
+static struct resource ram_resource = {
+	.name	= "System RAM",
+	.flags	= IORESOURCE_BUSY | IORESOURCE_MEM,
+};
+static struct resource code_resource = {
+	.name	= "Kernel code",
+	.flags	= IORESOURCE_BUSY | IORESOURCE_MEM,
+};
+static struct resource data_resource = {
+	.name	= "Kernel data",
+	.flags	= IORESOURCE_BUSY | IORESOURCE_MEM,
+};
 
 unsigned long memory_start;
 EXPORT_SYMBOL(memory_start);
@@ -89,8 +100,23 @@ static int __init early_parse_mem(char *p)
 {
 	unsigned long size;
 
+#ifdef CONFIG_32BIT
+	memory_start = (unsigned long)PAGE_OFFSET;
+#else
 	memory_start = (unsigned long)PAGE_OFFSET+__MEMORY_START;
+#endif
 	size = memparse(p, &p);
+
+	if (size > __MEMORY_SIZE) {
+		static char msg[] __initdata = KERN_ERR
+			"Using mem= to increase the size of kernel memory "
+			"is not allowed.\n"
+			"  Recompile the kernel with the correct value for "
+			"CONFIG_MEMORY_SIZE.\n";
+		printk(msg);
+		return 0;
+	}
+
 	memory_end = memory_start + size;
 
 	return 0;
@@ -139,45 +165,40 @@ void __init setup_bootmem_allocator(unsigned long free_pfn)
 	node_set_online(0);
 
 	/*
-	 * Reserve the kernel text and
-	 * Reserve the bootmem bitmap. We do this in two steps (first step
+	 * Reserve the kernel text and the bootmem bitmap.
+	 * We do this in two steps (first step
 	 * was init_bootmem()), because this catches the (definitely buggy)
 	 * case of us accidentally initializing the bootmem allocator with
 	 * an invalid RAM area.
 	 */
-	reserve_bootmem(__MEMORY_START+PAGE_SIZE,
-		(PFN_PHYS(free_pfn)+bootmap_size+PAGE_SIZE-1)-__MEMORY_START);
+	reserve_bootmem(__MEMORY_START + CONFIG_ZERO_PAGE_OFFSET,
+			(PFN_PHYS(free_pfn) + bootmap_size + PAGE_SIZE - 1) -
+			(__MEMORY_START + CONFIG_ZERO_PAGE_OFFSET));
 
 	/*
-	 * reserve physical page 0 - it's a special BIOS page on many boxes,
-	 * enabling clean reboots, SMP operation, laptop functions.
+	 * Reserve physical pages below CONFIG_ZERO_PAGE_OFFSET.
 	 */
-	reserve_bootmem(__MEMORY_START, PAGE_SIZE);
+	if (CONFIG_ZERO_PAGE_OFFSET != 0)
+		reserve_bootmem(__MEMORY_START, CONFIG_ZERO_PAGE_OFFSET);
 
 	sparse_memory_present_with_active_regions(0);
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	ROOT_DEV = MKDEV(RAMDISK_MAJOR, 0);
-	if (&__rd_start != &__rd_end) {
-		LOADER_TYPE = 1;
-		INITRD_START = PHYSADDR((unsigned long)&__rd_start) -
-					__MEMORY_START;
-		INITRD_SIZE = (unsigned long)&__rd_end -
-			      (unsigned long)&__rd_start;
-	}
-
 	if (LOADER_TYPE && INITRD_START) {
-		if (INITRD_START + INITRD_SIZE <= (max_low_pfn << PAGE_SHIFT)) {
-			reserve_bootmem(INITRD_START + __MEMORY_START,
-					INITRD_SIZE);
-			initrd_start = INITRD_START + PAGE_OFFSET +
-					__MEMORY_START;
+		/* INITRD_START is the offset from the start of RAM */
+
+		unsigned long initrd_start_phys = INITRD_START;
+		initrd_start_phys += __MEMORY_START;
+
+		if (initrd_start_phys + INITRD_SIZE <= PFN_PHYS(max_low_pfn)) {
+			reserve_bootmem(initrd_start_phys, INITRD_SIZE);
+			initrd_start = (unsigned long) __va(initrd_start_phys);
 			initrd_end = initrd_start + INITRD_SIZE;
 		} else {
 			printk("initrd extends beyond end of memory "
-			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-				    INITRD_START + INITRD_SIZE,
-				    max_low_pfn << PAGE_SHIFT);
+			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			       initrd_start_phys + INITRD_SIZE,
+			       PFN_PHYS(max_low_pfn));
 			initrd_start = 0;
 		}
 	}
@@ -205,6 +226,21 @@ static void __init setup_memory(void)
 extern void __init setup_memory(void);
 #endif
 
+static int __init request_standard_resources(void)
+{
+	ram_resource.start = __pa(memory_start);
+	ram_resource.end = __pa(memory_end)-1;
+	code_resource.start = virt_to_phys(_text);
+	code_resource.end = virt_to_phys(_etext)-1;
+	data_resource.start = virt_to_phys(_etext);
+	data_resource.end = virt_to_phys(_edata)-1;
+
+	request_resource(&iomem_resource, &ram_resource);
+	request_resource(&ram_resource, &code_resource);
+	request_resource(&ram_resource, &data_resource);
+	return 0;
+}
+
 void __init setup_arch(char **cmdline_p)
 {
 	enable_mmu();
@@ -224,18 +260,21 @@ void __init setup_arch(char **cmdline_p)
 	init_mm.end_data = (unsigned long) _edata;
 	init_mm.brk = (unsigned long) _end;
 
-	code_resource.start = virt_to_phys(_text);
-	code_resource.end = virt_to_phys(_etext)-1;
-	data_resource.start = virt_to_phys(_etext);
-	data_resource.end = virt_to_phys(_edata)-1;
-
+#ifdef CONFIG_32BIT
+	memory_start = (unsigned long)PAGE_OFFSET;
+#else
 	memory_start = (unsigned long)PAGE_OFFSET+__MEMORY_START;
+#endif
 	memory_end = memory_start + __MEMORY_SIZE;
 
-#ifdef CONFIG_CMDLINE_BOOL
+#ifdef CONFIG_CMDLINE_OVERWRITE
 	strlcpy(command_line, CONFIG_CMDLINE, sizeof(command_line));
 #else
 	strlcpy(command_line, COMMAND_LINE, sizeof(command_line));
+#ifdef CONFIG_CMDLINE_EXTEND
+	strlcat(command_line, " ", sizeof(command_line));
+	strlcat(command_line, CONFIG_CMDLINE, sizeof(command_line));
+#endif
 #endif
 
 	/* Save unparsed command line copy for /proc/cmdline */
@@ -243,6 +282,8 @@ void __init setup_arch(char **cmdline_p)
 	*cmdline_p = command_line;
 
 	parse_early_param();
+
+	request_standard_resources();
 
 	sh_mv_setup();
 
@@ -267,11 +308,15 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 
+	paging_init();
+
 	/* Perform the machine specific initialisation */
 	if (likely(sh_mv.mv_setup))
 		sh_mv.mv_setup(cmdline_p);
 
-	paging_init();
+#ifdef CONFIG_SMP
+	plat_smp_setup();
+#endif
 }
 
 static const char *cpu_name[] = {
@@ -279,12 +324,17 @@ static const char *cpu_name[] = {
 	[CPU_SH7705]	= "SH7705",	[CPU_SH7706]	= "SH7706",
 	[CPU_SH7707]	= "SH7707",	[CPU_SH7708]	= "SH7708",
 	[CPU_SH7709]	= "SH7709",	[CPU_SH7710]	= "SH7710",
-	[CPU_SH7712]	= "SH7712",
+	[CPU_SH7712]	= "SH7712",	[CPU_SH7720]	= "SH7720",
 	[CPU_SH7729]	= "SH7729",	[CPU_SH7750]	= "SH7750",
 	[CPU_SH7750S]	= "SH7750S",	[CPU_SH7750R]	= "SH7750R",
 	[CPU_SH7751]	= "SH7751",	[CPU_SH7751R]	= "SH7751R",
 	[CPU_SH7760]	= "SH7760",
 	[CPU_ST40RA]	= "ST40RA",	[CPU_ST40GX1]	= "ST40GX1",
+	[CPU_STX5197]	= "STx5197",
+	[CPU_STB7100]	= "STb7100",	[CPU_STX7105]	= "STx7105",
+	[CPU_STB7109]	= "STb7109",
+	[CPU_STX7111]	= "STx7111",	[CPU_STX7141]	= "STx7141",
+	[CPU_STX7200]	= "STx7200",
 	[CPU_SH4_202]	= "SH4-202",	[CPU_SH4_501]	= "SH4-501",
 	[CPU_SH7770]	= "SH7770",	[CPU_SH7780]	= "SH7780",
 	[CPU_SH7781]	= "SH7781",	[CPU_SH7343]	= "SH7343",
@@ -301,7 +351,7 @@ const char *get_cpu_subtype(struct sh_cpuinfo *c)
 /* Symbolic CPU flags, keep in sync with asm/cpu-features.h */
 static const char *cpu_flags[] = {
 	"none", "fpu", "p2flush", "mmuassoc", "dsp", "perfctr",
-	"ptea", "llsc", "l2", "op32", NULL
+	"ptea", "llsc", "l2", "op32", "icbi", "synco", "fpchg", NULL
 };
 
 static void show_cpuflags(struct seq_file *m, struct sh_cpuinfo *c)
@@ -350,6 +400,12 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	seq_printf(m, "processor\t: %d\n", cpu);
 	seq_printf(m, "cpu family\t: %s\n", init_utsname()->machine);
 	seq_printf(m, "cpu type\t: %s\n", get_cpu_subtype(c));
+	if (c->cut_major == -1)
+		seq_printf(m, "cut\t\t: unknown\n");
+	else if (c->cut_minor == -1)
+		seq_printf(m, "cut\t\t: %d.x\n", c->cut_major);
+	else
+		seq_printf(m, "cut\t\t: %d.%d\n", c->cut_major, c->cut_minor);
 
 	show_cpuflags(m, c);
 

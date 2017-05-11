@@ -132,6 +132,8 @@ enum hrtimer_restart it_real_fn(struct hrtimer *timer)
 	struct signal_struct *sig =
 	    container_of(timer, struct signal_struct, real_timer);
 
+	trace_mark(kernel_timer_itimer_expired, "pid %d", sig->tsk->pid);
+
 	send_group_sig_info(SIGALRM, SEND_SIG_PRIV, sig->tsk);
 
 	return HRTIMER_NORESTART;
@@ -156,6 +158,15 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 	if (!timeval_valid(&value->it_value) ||
 	    !timeval_valid(&value->it_interval))
 		return -EINVAL;
+
+	trace_mark(kernel_timer_itimer_set,
+			"which %d interval_sec %ld interval_usec %ld "
+			"value_sec %ld value_usec %ld",
+			which,
+			value->it_interval.tv_sec,
+			value->it_interval.tv_usec,
+			value->it_value.tv_sec,
+			value->it_value.tv_usec);
 
 	switch (which) {
 	case ITIMER_REAL:

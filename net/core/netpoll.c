@@ -46,6 +46,10 @@ static atomic_t trapped;
 		(MAX_UDP_CHUNK + sizeof(struct udphdr) + \
 				sizeof(struct iphdr) + sizeof(struct ethhdr))
 
+#ifdef CONFIG_NWHW_CONFIG
+void nwhw_uconfig(struct net_device *);
+#endif
+
 static void zap_completion_queue(void);
 static void arp_reply(struct sk_buff *skb);
 
@@ -505,7 +509,8 @@ int __netpoll_rx(struct sk_buff *skb)
 
 	np->rx_hook(np, ntohs(uh->source),
 		    (char *)(uh+1),
-		    ulen - sizeof(struct udphdr));
+		    ulen - sizeof(struct udphdr),
+		    skb);
 
 	kfree_skb(skb);
 	return 1;
@@ -675,6 +680,13 @@ int netpoll_setup(struct netpoll *np)
 
 	if (!netif_running(ndev)) {
 		unsigned long atmost, atleast;
+
+#ifdef CONFIG_NWHW_CONFIG
+		/* Configuring the network hardware from the command line,
+		   enabling the NWHW_CONFIG support, we are quite sure that the
+		   network devices properties must be set manually. */
+		nwhw_uconfig(ndev);
+#endif
 
 		printk(KERN_INFO "%s: device %s not up yet, forcing it\n",
 		       np->name, np->dev_name);

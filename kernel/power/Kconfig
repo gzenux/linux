@@ -110,7 +110,7 @@ config SUSPEND
 
 config HIBERNATION_UP_POSSIBLE
 	bool
-	depends on X86 || PPC64_SWSUSP || PPC32
+	depends on X86 || PPC64_SWSUSP || PPC32 || CPU_SH4
 	depends on !SMP
 	default y
 
@@ -206,3 +206,4 @@ config APM_EMULATION
 	  random kernel OOPSes or reboots that don't seem to be related to
 	  anything, try disabling/enabling this option (or disabling/enabling
 	  APM in your BIOS).
+

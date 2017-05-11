@@ -20,12 +20,13 @@
  * Default implementation of macro that returns current
  * instruction pointer ("program counter").
  */
-#define current_text_addr() ({ void *pc; __asm__("mova	1f, %0\n1:":"=z" (pc)); pc; })
+#define current_text_addr() ({ void *pc; __asm__("mova	1f, %0\n.align 2\n1:":"=z" (pc)); pc; })
 
 /* Core Processor Version Register */
 #define CCN_PVR		0xff000030
 #define CCN_CVR		0xff000040
 #define CCN_PRR		0xff000044
+#define CCN_RAMCR	0xff000074	/* ST40-300 */
 
 /*
  *  CPU type and hardware bug flags. Kept separately for each CPU.
@@ -45,11 +46,15 @@ enum cpu_type {
 	CPU_SH7705, CPU_SH7706, CPU_SH7707,
 	CPU_SH7708, CPU_SH7708S, CPU_SH7708R,
 	CPU_SH7709, CPU_SH7709A, CPU_SH7710, CPU_SH7712,
-	CPU_SH7729,
+	CPU_SH7720, CPU_SH7729,
 
 	/* SH-4 types */
 	CPU_SH7750, CPU_SH7750S, CPU_SH7750R, CPU_SH7751, CPU_SH7751R,
-	CPU_SH7760, CPU_ST40RA, CPU_ST40GX1, CPU_SH4_202, CPU_SH4_501,
+	CPU_SH7760, CPU_ST40RA, CPU_ST40GX1, CPU_STI5528, CPU_STM8000,
+	CPU_STX5197,
+	CPU_STB7100, CPU_STX7105, CPU_STB7109, CPU_STX7111, CPU_STX7141,
+	CPU_STX7200,
+	CPU_SH4_202, CPU_SH4_501,
 
 	/* SH-4A types */
 	CPU_SH7770, CPU_SH7780, CPU_SH7781, CPU_SH7785, CPU_SHX3,
@@ -63,6 +68,7 @@ enum cpu_type {
 
 struct sh_cpuinfo {
 	unsigned int type;
+	int cut_major, cut_minor;
 	unsigned long loops_per_jiffy;
 	unsigned long asid_cache;
 
@@ -73,15 +79,10 @@ struct sh_cpuinfo {
 	unsigned long flags;
 } __attribute__ ((aligned(SMP_CACHE_BYTES)));
 
-extern struct sh_cpuinfo boot_cpu_data;
-
-#ifdef CONFIG_SMP
 extern struct sh_cpuinfo cpu_data[];
+#define boot_cpu_data cpu_data[0]
 #define current_cpu_data cpu_data[smp_processor_id()]
-#else
-#define cpu_data (&boot_cpu_data)
-#define current_cpu_data boot_cpu_data
-#endif
+#define raw_current_cpu_data cpu_data[raw_smp_processor_id()]
 
 /*
  * User space process size: 2GB.

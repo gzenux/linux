@@ -81,6 +81,7 @@ int mdiobus_register(struct mii_bus *bus)
 		 * 5) mii_bus
 		 * And, we need to register it */
 		if (phydev) {
+			printk(KERN_DEBUG "mdiobus_register: found PHY and assigning IRQ %d\n", bus->irq[i]);
 			phydev->irq = bus->irq[i];
 
 			phydev->dev.parent = bus->dev;
@@ -91,9 +92,12 @@ int mdiobus_register(struct mii_bus *bus)
 
 			err = device_register(&phydev->dev);
 
-			if (err)
+			if (err) {
 				printk(KERN_ERR "phy %d failed to register\n",
 						i);
+				phy_device_free(phydev);
+				phydev = NULL;
+			}
 		}
 
 		bus->phy_map[i] = phydev;
@@ -110,10 +114,8 @@ void mdiobus_unregister(struct mii_bus *bus)
 	int i;
 
 	for (i = 0; i < PHY_MAX_ADDR; i++) {
-		if (bus->phy_map[i]) {
+		if (bus->phy_map[i])
 			device_unregister(&bus->phy_map[i]->dev);
-			kfree(bus->phy_map[i]);
-		}
 	}
 }
 EXPORT_SYMBOL(mdiobus_unregister);
@@ -142,9 +144,12 @@ static int mdio_bus_suspend(struct device * dev, pm_message_t state)
 {
 	int ret = 0;
 	struct device_driver *drv = dev->driver;
+	struct phy_driver *phydrv = to_phy_driver(drv);
+	struct phy_device *phydev = to_phy_device(dev);
 
-	if (drv && drv->suspend)
-		ret = drv->suspend(dev, state);
+	if ((!device_may_wakeup(phydev->dev.parent)) && 
+		(phydrv && phydrv->suspend))
+			ret = phydrv->suspend(phydev);
 
 	return ret;
 }
@@ -153,9 +158,12 @@ static int mdio_bus_resume(struct device * dev)
 {
 	int ret = 0;
 	struct device_driver *drv = dev->driver;
+	struct phy_driver *phydrv = to_phy_driver(drv);
+	struct phy_device *phydev = to_phy_device(dev);
 
-	if (drv && drv->resume)
-		ret = drv->resume(dev);
+	if ((!device_may_wakeup(phydev->dev.parent)) && 
+		(phydrv && phydrv->resume))
+		ret = phydrv->resume(phydev);
 
 	return ret;
 }

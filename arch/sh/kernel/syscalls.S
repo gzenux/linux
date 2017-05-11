@@ -14,24 +14,6 @@
 #include <linux/sys.h>
 #include <linux/linkage.h>
 
-#if !defined(CONFIG_NFSD) && !defined(CONFIG_NFSD_MODULE)
-#define sys_nfsservctl		sys_ni_syscall
-#endif
-
-#if !defined(CONFIG_MMU)
-#define sys_madvise		sys_ni_syscall
-#define sys_readahead		sys_ni_syscall
-#define sys_mprotect		sys_ni_syscall
-#define sys_msync		sys_ni_syscall
-#define sys_mlock		sys_ni_syscall
-#define sys_munlock		sys_ni_syscall
-#define sys_mlockall		sys_ni_syscall
-#define sys_munlockall		sys_ni_syscall
-#define sys_mremap		sys_ni_syscall
-#define sys_mincore		sys_ni_syscall
-#define sys_remap_file_pages	sys_ni_syscall
-#endif
-
 	.data
 ENTRY(sys_call_table)
 	.long sys_restart_syscall	/* 0  -  old "setup()" system call*/
@@ -157,7 +139,7 @@ ENTRY(sys_call_table)
 	.long sys_clone		/* 120 */
 	.long sys_setdomainname
 	.long sys_newuname
-	.long sys_ni_syscall	/* sys_modify_ldt */
+	.long sys_cacheflush	/* x86: sys_modify_ldt */
 	.long sys_adjtimex
 	.long sys_mprotect		/* 125 */
 	.long sys_sigprocmask

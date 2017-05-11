@@ -8,7 +8,7 @@
 #include <linux/vmalloc.h>
 #include <linux/pci.h>
 #include <linux/irq.h>
-
+#include <asm/sections.h>
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
@@ -26,7 +26,6 @@ EXPORT_SYMBOL(sh_mv);
 /* platform dependent support */
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(kernel_thread);
-EXPORT_SYMBOL(irq_desc);
 EXPORT_SYMBOL(no_irq_type);
 
 EXPORT_SYMBOL(strlen);
@@ -43,7 +42,14 @@ EXPORT_SYMBOL(memcpy);
 EXPORT_SYMBOL(memset);
 EXPORT_SYMBOL(memmove);
 EXPORT_SYMBOL(__copy_user);
-EXPORT_SYMBOL(boot_cpu_data);
+
+#ifdef CONFIG_FLATMEM
+#include <linux/bootmem.h>
+EXPORT_SYMBOL(min_low_pfn);     /* defined by bootmem.c, but not exported by gen
+eric code */
+EXPORT_SYMBOL(max_low_pfn);     /* defined by bootmem.c, but not exported by gen
+eric code */
+#endif
 
 #ifdef CONFIG_MMU
 EXPORT_SYMBOL(get_vm_area);
@@ -53,6 +59,7 @@ EXPORT_SYMBOL(get_vm_area);
 EXPORT_SYMBOL(__up);
 EXPORT_SYMBOL(__down);
 EXPORT_SYMBOL(__down_interruptible);
+EXPORT_SYMBOL(__down_trylock);
 
 EXPORT_SYMBOL(__udelay);
 EXPORT_SYMBOL(__ndelay);
@@ -124,27 +131,28 @@ DECLARE_EXPORT(__udivsi3_i4i);
 #else /* GCC 3.x */
 DECLARE_EXPORT(__movstr_i4_even);
 DECLARE_EXPORT(__movstr_i4_odd);
+DECLARE_EXPORT(__movmem_i4_even); /* movstr became movmem in gcc-4.1 */
+DECLARE_EXPORT(__movmem_i4_odd);
 DECLARE_EXPORT(__movstrSI12_i4);
 #endif /* __GNUC__ == 4 */
 #endif
 
-#if defined(CONFIG_CPU_SH4) || defined(CONFIG_SH7705_CACHE_32KB)
+#if !defined(CONFIG_CACHE_OFF) && (defined(CONFIG_CPU_SH4) || \
+	defined(CONFIG_SH7705_CACHE_32KB))
 /* needed by some modules */
 EXPORT_SYMBOL(flush_cache_all);
 EXPORT_SYMBOL(flush_cache_range);
+EXPORT_SYMBOL(flush_cache_page);
 EXPORT_SYMBOL(flush_dcache_page);
+EXPORT_SYMBOL(__flush_wback_region);
 EXPORT_SYMBOL(__flush_purge_region);
+EXPORT_SYMBOL(__flush_invalidate_region);
 #endif
 
-#if defined(CONFIG_MMU) && (defined(CONFIG_CPU_SH4) || \
-	defined(CONFIG_SH7705_CACHE_32KB))
+#if !defined(CONFIG_CACHE_OFF) && defined(CONFIG_MMU) && \
+	(defined(CONFIG_CPU_SH4) || defined(CONFIG_SH7705_CACHE_32KB))
 EXPORT_SYMBOL(clear_user_page);
-#endif
-
-EXPORT_SYMBOL(__down_trylock);
-
-#ifdef CONFIG_SMP
-EXPORT_SYMBOL(synchronize_irq);
+EXPORT_SYMBOL(copy_user_page);
 #endif
 
 EXPORT_SYMBOL(csum_partial);
@@ -154,3 +162,4 @@ EXPORT_SYMBOL(csum_ipv6_magic);
 #endif
 EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(__clear_user);
+EXPORT_SYMBOL(_ebss);

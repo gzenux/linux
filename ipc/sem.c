@@ -293,6 +293,7 @@ asmlinkage long sys_semget (key_t key, int nsems, int semflg)
 	}
 
 	mutex_unlock(&sem_ids(ns).mutex);
+	trace_mark(ipc_sem_create, "id %d flags %d", err, semflg);
 	return err;
 }
 

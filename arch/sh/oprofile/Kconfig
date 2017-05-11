@@ -19,5 +19,12 @@ config OPROFILE
 
 	  If unsure, say N.
 
+config OPROFILE_TMU
+	bool "Use 710x TMU for profiling (EXPERIMENTAL)"
+	depends on OPROFILE
+	depends on CPU_SUBTYPE_STB7100
+	help
+	  Say Y here to use the 710x PWM timer for oprofile sampling.
+
 endmenu
 

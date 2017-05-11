@@ -159,26 +159,40 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
 
 		/* enable remote wakeup on all ports */
 		if (device_may_wakeup(&hcd->self.root_hub->dev))
-			t2 |= PORT_WKOC_E|PORT_WKDISC_E|PORT_WKCONN_E;
+/*
+ * FMV: No Connect/Disconnect WakeUp from USB
+ *			t2 |= PORT_WKOC_E|PORT_WKDISC_E|PORT_WKCONN_E;
+ */
+
+			t2 |= PORT_WKOC_E;
 		else
 			t2 &= ~(PORT_WKOC_E|PORT_WKDISC_E|PORT_WKCONN_E);
-
 		if (t1 != t2) {
 			ehci_vdbg (ehci, "port %d, %08x -> %08x\n",
 				port + 1, t1, t2);
 			ehci_writel(ehci, t2, reg);
 		}
 	}
-
+/*
+ * FMV: mdelay suggested by IP desiner
+ */
+	mdelay(10);
 	/* turn off now-idle HC */
 	del_timer_sync (&ehci->watchdog);
 	ehci_halt (ehci);
 	hcd->state = HC_STATE_SUSPENDED;
 
 	/* allow remote wakeup */
+/*
+ * FMV: No remote wakeup
+ */
+#if 0
 	mask = INTR_MASK;
 	if (!device_may_wakeup(&hcd->self.root_hub->dev))
 		mask &= ~STS_PCD;
+#else
+	mask = INTR_MASK & ~STS_PCD;
+#endif
 	ehci_writel(ehci, mask, &ehci->regs->intr_enable);
 	ehci_readl(ehci, &ehci->regs->intr_enable);
 

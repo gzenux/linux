@@ -20,6 +20,7 @@ hostprogs-y += unifdef
 
 subdir-$(CONFIG_MODVERSIONS) += genksyms
 subdir-y                     += mod
+subdir-$(CONFIG_LKM_ELF_HASH)    += ksymhash
 
 # Let clean descend into subdirs
 subdir-	+= basic kconfig package

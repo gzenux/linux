@@ -17,8 +17,6 @@
 #include <linux/kprobes.h>
 #include <asm/system.h>
 #include <asm/mmu_context.h>
-#include <asm/tlbflush.h>
-#include <asm/kgdb.h>
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -36,16 +34,7 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 	int fault;
 	siginfo_t info;
 
-	trace_hardirqs_on();
-	local_irq_enable();
-
-#ifdef CONFIG_SH_KGDB
-	if (kgdb_nofault && kgdb_bus_err_hook)
-		kgdb_bus_err_hook();
-#endif
-
 	tsk = current;
-	mm = tsk->mm;
 	si_code = SEGV_MAPERR;
 
 	if (unlikely(address >= TASK_SIZE)) {
@@ -64,7 +53,6 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 		pgd = get_TTB() + offset;
 		pgd_k = swapper_pg_dir + offset;
 
-		/* This will never happen with the folded page table. */
 		if (!pgd_present(*pgd)) {
 			if (!pgd_present(*pgd_k))
 				goto bad_area_nosemaphore;
@@ -74,9 +62,13 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 
 		pud = pud_offset(pgd, address);
 		pud_k = pud_offset(pgd_k, address);
-		if (pud_present(*pud) || !pud_present(*pud_k))
-			goto bad_area_nosemaphore;
-		set_pud(pud, *pud_k);
+
+		if (!pud_present(*pud)) {
+			if (!pud_present(*pud_k))
+				goto bad_area_nosemaphore;
+			set_pud(pud, *pud_k);
+			return;
+		}
 
 		pmd = pmd_offset(pud, address);
 		pmd_k = pmd_offset(pud_k, address);
@@ -86,6 +78,21 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 
 		return;
 	}
+
+	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld",
+		({
+			unsigned long trapnr;
+			asm volatile("stc	r2_bank,%0": "=r" (trapnr));
+			trapnr;
+		}) >> 5,
+		instruction_pointer(regs));
+
+	/* Only enable interrupts if they were on before the fault */
+	if ((regs->sr & SR_IMASK) != SR_IMASK) {
+		local_irq_enable();
+	}
+
+	mm = tsk->mm;
 
 	/*
 	 * If we're in an interrupt or have no user
@@ -139,6 +146,7 @@ survive:
 		tsk->min_flt++;
 
 	up_read(&mm->mmap_sem);
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 	return;
 
 /*
@@ -155,6 +163,7 @@ bad_area_nosemaphore:
 		info.si_code = si_code;
 		info.si_addr = (void *) address;
 		force_sig_info(SIGSEGV, &info, tsk);
+		trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 		return;
 	}
 
@@ -200,6 +209,7 @@ no_context:
 	die("Oops", regs, writeaccess);
 	bust_spinlocks(0);
 	do_exit(SIGKILL);
+	dump_stack();
 
 /*
  * We ran out of memory, or some other thing happened to us that made
@@ -233,90 +243,6 @@ do_sigbus:
 	/* Kernel mode? Handle exceptions or die */
 	if (!user_mode(regs))
 		goto no_context;
-}
 
-#ifdef CONFIG_SH_STORE_QUEUES
-/*
- * This is a special case for the SH-4 store queues, as pages for this
- * space still need to be faulted in before it's possible to flush the
- * store queue cache for writeout to the remapped region.
- */
-#define P3_ADDR_MAX		(P4SEG_STORE_QUE + 0x04000000)
-#else
-#define P3_ADDR_MAX		P4SEG
-#endif
-
-/*
- * Called with interrupts disabled.
- */
-asmlinkage int __kprobes __do_page_fault(struct pt_regs *regs,
-					 unsigned long writeaccess,
-					 unsigned long address)
-{
-	pgd_t *pgd;
-	pud_t *pud;
-	pmd_t *pmd;
-	pte_t *pte;
-	pte_t entry;
-	struct mm_struct *mm = current->mm;
-	spinlock_t *ptl = NULL;
-	int ret = 1;
-
-#ifdef CONFIG_SH_KGDB
-	if (kgdb_nofault && kgdb_bus_err_hook)
-		kgdb_bus_err_hook();
-#endif
-
-	/*
-	 * We don't take page faults for P1, P2, and parts of P4, these
-	 * are always mapped, whether it be due to legacy behaviour in
-	 * 29-bit mode, or due to PMB configuration in 32-bit mode.
-	 */
-	if (address >= P3SEG && address < P3_ADDR_MAX) {
-		pgd = pgd_offset_k(address);
-		mm = NULL;
-	} else {
-		if (unlikely(address >= TASK_SIZE || !mm))
-			return 1;
-
-		pgd = pgd_offset(mm, address);
-	}
-
-	pud = pud_offset(pgd, address);
-	if (pud_none_or_clear_bad(pud))
-		return 1;
-	pmd = pmd_offset(pud, address);
-	if (pmd_none_or_clear_bad(pmd))
-		return 1;
-
-	if (mm)
-		pte = pte_offset_map_lock(mm, pmd, address, &ptl);
-	else
-		pte = pte_offset_kernel(pmd, address);
-
-	entry = *pte;
-	if (unlikely(pte_none(entry) || pte_not_present(entry)))
-		goto unlock;
-	if (unlikely(writeaccess && !pte_write(entry)))
-		goto unlock;
-
-	if (writeaccess)
-		entry = pte_mkdirty(entry);
-	entry = pte_mkyoung(entry);
-
-#ifdef CONFIG_CPU_SH4
-	/*
-	 * ITLB is not affected by "ldtlb" instruction.
-	 * So, we need to flush the entry by ourselves.
-	 */
-	local_flush_tlb_one(get_asid(), address & PAGE_MASK);
-#endif
-
-	set_pte(pte, entry);
-	update_mmu_cache(NULL, address, entry);
-	ret = 0;
-unlock:
-	if (mm)
-		pte_unmap_unlock(pte, ptl);
-	return ret;
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }

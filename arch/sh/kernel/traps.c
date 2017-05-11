@@ -25,16 +25,15 @@
 #include <linux/limits.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <linux/kgdb.h>
+#include <linux/proc_fs.h>
 
-#ifdef CONFIG_SH_KGDB
-#include <asm/kgdb.h>
-#define CHK_REMOTE_DEBUG(regs)			\
-{						\
-	if (kgdb_debug_hook && !user_mode(regs))\
-		(*kgdb_debug_hook)(regs);       \
-}
-#else
-#define CHK_REMOTE_DEBUG(regs)
+#ifdef CONFIG_KGDB
+extern void kgdb_exception_handler(struct pt_regs *regs);
+#endif
+
+#ifdef CONFIG_KPROBES
+extern int kprobe_handle_illslot(unsigned long pc);
 #endif
 
 #ifdef CONFIG_CPU_SH2
@@ -48,6 +47,87 @@
 #else
 #define TRAP_RESERVED_INST	12
 #define TRAP_ILLEGAL_SLOT_INST	13
+#endif
+
+static unsigned long se_user;
+static unsigned long se_sys;
+static unsigned long se_skipped;
+static unsigned long se_half;
+static unsigned long se_word;
+static unsigned long se_dword;
+static unsigned long se_multi;
+/* bitfield: 1: warn 2: fixup 4: signal -> combinations 2|4 && 1|2|4 are not
+   valid! */
+static int se_usermode = 3;
+/* 0: no warning 1: print a warning message */
+static int se_kernmode_warn = 1;
+
+#ifdef CONFIG_PROC_FS
+static const char *se_usermode_action[] = {
+	"ignored",
+	"warn",
+	"fixup",
+	"fixup+warn",
+	"signal",
+	"signal+warn"
+};
+
+static int
+proc_alignment_read(char *page, char **start, off_t off, int count, int *eof,
+		    void *data)
+{
+	char *p = page;
+	int len;
+
+	p += sprintf(p, "User:\t\t%lu\n", se_user);
+	p += sprintf(p, "System:\t\t%lu\n", se_sys);
+	p += sprintf(p, "Skipped:\t%lu\n", se_skipped);
+	p += sprintf(p, "Half:\t\t%lu\n", se_half);
+	p += sprintf(p, "Word:\t\t%lu\n", se_word);
+	p += sprintf(p, "DWord:\t\t%lu\n", se_dword);
+	p += sprintf(p, "Multi:\t\t%lu\n", se_multi);
+	p += sprintf(p, "User faults:\t%i (%s)\n", se_usermode,
+			se_usermode_action[se_usermode]);
+	p += sprintf(p, "Kernel faults:\t%i (fixup%s)\n", se_kernmode_warn,
+			se_kernmode_warn ? "+warn" : "");
+
+	len = (p - page) - off;
+	if (len < 0)
+		len = 0;
+
+	*eof = (len <= count) ? 1 : 0;
+	*start = page + off;
+
+	return len;
+}
+
+static int proc_alignment_write(struct file *file, const char __user *buffer,
+				unsigned long count, void *data)
+{
+	char mode;
+
+	if (count > 0) {
+		if (get_user(mode, buffer))
+			return -EFAULT;
+		if (mode >= '0' && mode <= '5')
+			se_usermode = mode - '0';
+	}
+	return count;
+}
+
+static int proc_alignment_kern_write(struct file *file, const char __user *buffer,
+				     unsigned long count, void *data)
+{
+	char mode;
+
+	if (count > 0) {
+		if (get_user(mode, buffer))
+			return -EFAULT;
+		if (mode >= '0' && mode <= '1')
+			se_kernmode_warn = mode - '0';
+	}
+	return count;
+}
 #endif
 
 static void dump_mem(const char *str, unsigned long bottom, unsigned long top)
@@ -91,7 +171,9 @@ void die(const char * str, struct pt_regs * regs, long err)
 
 	printk("%s: %04lx [#%d]\n", str, err & 0xffff, ++die_counter);
 
-	CHK_REMOTE_DEBUG(regs);
+#ifdef CONFIG_KGDB
+	kgdb_exception_handler(regs);
+#endif
 	print_modules();
 	show_regs(regs);
 
@@ -133,18 +215,17 @@ static inline void die_if_kernel(const char *str, struct pt_regs *regs,
  * - other kernel errors are bad
  * - return 0 if fixed-up, -EFAULT if non-fatal (to the kernel) fault
  */
-static int die_if_no_fixup(const char * str, struct pt_regs * regs, long err)
+static void die_if_no_fixup(const char * str, struct pt_regs * regs, long err)
 {
 	if (!user_mode(regs)) {
 		const struct exception_table_entry *fixup;
 		fixup = search_exception_tables(regs->pc);
 		if (fixup) {
 			regs->pc = fixup->fixup;
-			return 0;
+			return;
 		}
 		die(str, regs, err);
 	}
-	return -EFAULT;
 }
 
 /*
@@ -152,7 +233,10 @@ static int die_if_no_fixup(const char * str, struct pt_regs * regs, long err)
  * desired behaviour
  * - note that PC _may not_ point to the faulting instruction
  *   (if that instruction is in a branch delay slot)
- * - return 0 if emulation okay, -EFAULT on existential error
+ * - return:
+ *   0 if emulation okay (PC unchanged)
+ *   1 if emulation OK (PC already updated)
+ *   -EFAULT on existential error
  */
 static int handle_unaligned_ins(u16 instruction, struct pt_regs *regs)
 {
@@ -167,6 +251,13 @@ static int handle_unaligned_ins(u16 instruction, struct pt_regs *regs)
 	rm = &regs->regs[index];
 
 	count = 1<<(instruction&3);
+
+	switch (count) {
+	case 1: se_half  += 1; break;
+	case 2: se_word  += 1; break;
+	case 4: se_dword += 1; break;
+	case 8: se_multi += 1; break; /* ??? */
+	}
 
 	ret = -EFAULT;
 	switch (instruction>>12) {
@@ -325,7 +416,8 @@ static int handle_unaligned_ins(u16 instruction, struct pt_regs *regs)
 	/* Argh. Address not only misaligned but also non-existent.
 	 * Raise an EFAULT and see if it's trapped
 	 */
-	return die_if_no_fixup("Fault in unaligned fixup", regs, 0);
+	die_if_no_fixup("Fault in unaligned fixup", regs, 0);
+	return -EFAULT;
 }
 
 /*
@@ -370,8 +462,6 @@ static inline int handle_unaligned_delayslot(struct pt_regs *regs)
  * opcodes..
  */
 #ifndef CONFIG_CPU_SH2A
-static int handle_unaligned_notify_count = 10;
-
 static int handle_unaligned_access(u16 instruction, struct pt_regs *regs)
 {
 	u_int rm;
@@ -379,15 +469,6 @@ static int handle_unaligned_access(u16 instruction, struct pt_regs *regs)
 
 	index = (instruction>>8)&15;	/* 0x0F00 */
 	rm = regs->regs[index];
-
-	/* shout about the first ten userspace fixups */
-	if (user_mode(regs) && handle_unaligned_notify_count>0) {
-		handle_unaligned_notify_count--;
-
-		printk(KERN_NOTICE "Fixing up unaligned userspace access "
-		       "in \"%s\" pid=%d pc=0x%p ins=0x%04hx\n",
-		       current->comm,current->pid,(u16*)regs->pc,instruction);
-	}
 
 	ret = -EFAULT;
 	switch (instruction&0xF000) {
@@ -547,6 +628,9 @@ asmlinkage void do_address_error(struct pt_regs *regs,
 	lookup_exception_vector(error_code);
 #endif
 
+	trace_mark(kernel_arch_trap_entry, "trap_id %ld ip #p%ld",
+		(error_code >> 5), instruction_pointer(regs));
+
 	oldfs = get_fs();
 
 	if (user_mode(regs)) {
@@ -554,6 +638,43 @@ asmlinkage void do_address_error(struct pt_regs *regs,
 
 		local_irq_enable();
 
+		se_user += 1;
+
+#ifndef CONFIG_CPU_SH2A
+		set_fs(USER_DS);
+		if (copy_from_user (&instruction, (u16 *)(regs->pc & ~1), 2)) {
+                        /* Argh. Fault on the instruction itself.
+                           This should never happen non-SMP
+                        */
+			set_fs(oldfs);
+			goto uspace_segv;
+		}
+		set_fs(oldfs);
+
+		if (test_thread_flag (TIF_UAC_SIGBUS))
+			goto uspace_segv;
+
+		/* shout about userspace fixups */
+		if ((se_usermode & 1) && !(test_thread_flag (TIF_UAC_NOPRINT)))
+			printk("Unaligned userspace access "
+			       "in \"%s\" pid=%d pc=0x%p ins=0x%04hx\n",
+			       current->comm,current->pid,
+			       (u16*)regs->pc,instruction);
+#endif
+
+		if (se_usermode & 2)
+			goto fixup;
+
+		if (se_usermode & 4)
+			goto uspace_segv;
+		else {
+			/* ignore */
+			trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
+			regs->pc += instruction_size(instruction);
+			return;
+		}
+
+fixup:
 		/* bad PC is not something we can fix */
 		if (regs->pc & 1) {
 			si_code = BUS_ADRALN;
@@ -562,19 +683,13 @@ asmlinkage void do_address_error(struct pt_regs *regs,
 
 #ifndef CONFIG_CPU_SH2A
 		set_fs(USER_DS);
-		if (copy_from_user(&instruction, (u16 *)(regs->pc), 2)) {
-			/* Argh. Fault on the instruction itself.
-			   This should never happen non-SMP
-			*/
-			set_fs(oldfs);
-			goto uspace_segv;
-		}
-
 		tmp = handle_unaligned_access(instruction, regs);
 		set_fs(oldfs);
 
-		if (tmp==0)
+		if (tmp>=0){
+			trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 			return; /* sorted */
+		}
 #endif
 
 uspace_segv:
@@ -588,6 +703,14 @@ uspace_segv:
 		info.si_addr = (void __user *)address;
 		force_sig_info(SIGBUS, &info, current);
 	} else {
+		se_sys += 1;
+
+		if (se_kernmode_warn)
+			printk("Unaligned kernel access "
+			       "on behalf of \"%s\" pid=%d pc=0x%p ins=0x%04hx\n",
+			       current->comm,current->pid,(u16*)regs->pc,
+			       instruction);
+
 		if (regs->pc & 1)
 			die("unaligned program counter", regs, error_code);
 
@@ -610,6 +733,7 @@ uspace_segv:
 		force_sig(SIGSEGV, current);
 #endif
 	}
+	trace_mark(kernel_arch_trap_exit, MARK_NOARGS);
 }
 
 #ifdef CONFIG_SH_DSP
@@ -700,7 +824,9 @@ asmlinkage void do_reserved_inst(unsigned long r4, unsigned long r5,
 	lookup_exception_vector(error_code);
 
 	local_irq_enable();
-	CHK_REMOTE_DEBUG(regs);
+#ifdef CONFIG_KGDB
+	kgdb_exception_handler(regs);
+#endif
 	force_sig(SIGILL, tsk);
 	die_if_no_fixup("reserved instruction", regs, error_code);
 }
@@ -755,6 +881,11 @@ asmlinkage void do_illegal_slot_inst(unsigned long r4, unsigned long r5,
 	struct pt_regs *regs = RELOC_HIDE(&__regs, 0);
 	unsigned long error_code;
 	struct task_struct *tsk = current;
+#ifdef CONFIG_KPROBES
+	if (kprobe_handle_illslot(regs->pc) == 0)
+		return;
+#endif
+
 #ifdef CONFIG_SH_FPU_EMU
 	unsigned short inst = 0;
 
@@ -771,7 +902,9 @@ asmlinkage void do_illegal_slot_inst(unsigned long r4, unsigned long r5,
 	lookup_exception_vector(error_code);
 
 	local_irq_enable();
-	CHK_REMOTE_DEBUG(regs);
+#ifdef CONFIG_KGDB
+	kgdb_exception_handler(regs);
+#endif
 	force_sig(SIGILL, tsk);
 	die_if_no_fixup("illegal slot instruction", regs, error_code);
 }
@@ -807,12 +940,13 @@ static inline void __init gdb_vbr_init(void)
 }
 #endif
 
-void __init per_cpu_trap_init(void)
+void __cpuinit per_cpu_trap_init(void)
 {
 	extern void *vbr_base;
 
 #ifdef CONFIG_SH_STANDARD_BIOS
-	gdb_vbr_init();
+	if (raw_smp_processor_id() == 0)
+		gdb_vbr_init();
 #endif
 
 	/* NOTE: The VBR value should be at P1
@@ -921,6 +1055,54 @@ void show_trace(struct task_struct *tsk, unsigned long *sp,
 	debug_show_held_locks(tsk);
 }
 
+void get_stack(char *buf, unsigned long *sp, size_t size, size_t depth)
+{
+	unsigned long addr;
+#ifdef CONFIG_KALLSYMS
+	char *modname;
+	const char *name;
+	unsigned long offset, symbolsize;
+	char namebuf[KSYM_NAME_LEN + 1];
+#endif
+	int i = 0;
+	int pos = 0;
+
+	while (!kstack_end(sp) && i < depth) {
+		addr = *sp++;
+		if (kernel_text_address(addr)){
+			pos += snprintf(buf + pos, size - pos, "[<%08lx>] ",
+					addr);
+
+#ifdef CONFIG_KALLSYMS
+			name = kallsyms_lookup(addr, &symbolsize, &offset,
+					       &modname, namebuf);
+			if (!name) {
+				pos += snprintf(buf + pos, size - pos,
+					        "0x%lx", addr);
+			} else {
+				if (modname) {
+					pos += snprintf(buf + pos,
+					                size - pos,
+					                "%s+%#lx/%#lx [%s]\n",
+					                name, offset,
+					                symbolsize, modname);
+				} else {
+					pos += snprintf(buf + pos,
+					                size - pos,
+					                "%s+%#lx/%#lx\n", name,
+					                offset, symbolsize);
+				}
+			}
+#else
+			pos += snprintf(buf + pos, size - pos, "\n");
+#endif
+			i++;
+		}
+	}
+}
+
+EXPORT_SYMBOL_GPL(get_stack);
+
 void show_stack(struct task_struct *tsk, unsigned long *sp)
 {
 	unsigned long stack;
@@ -943,3 +1125,38 @@ void dump_stack(void)
 	show_stack(NULL, NULL);
 }
 EXPORT_SYMBOL(dump_stack);
+
+#ifdef CONFIG_PROC_FS
+/*
+ * This needs to be done after sysctl_init, otherwise sys/ will be
+ * overwritten.  Actually, this shouldn't be in sys/ at all since
+ * it isn't a sysctl, and it doesn't contain sysctl information.
+ * We now locate it in /proc/cpu/alignment instead.
+ */
+static int __init alignment_init(void)
+{
+	struct proc_dir_entry *dir, *res;
+
+	dir = proc_mkdir("cpu", NULL);
+	if (!dir)
+		return -ENOMEM;
+
+	res = create_proc_entry("alignment", S_IWUSR | S_IRUGO, dir);
+	if (!res)
+		return -ENOMEM;
+
+	res->read_proc = proc_alignment_read;
+	res->write_proc = proc_alignment_write;
+
+        res = create_proc_entry("kernel_alignment", S_IWUSR | S_IRUGO, dir);
+        if (!res)
+                return -ENOMEM;
+
+        res->read_proc = proc_alignment_read;
+        res->write_proc = proc_alignment_kern_write;
+
+	return 0;
+}
+
+fs_initcall(alignment_init);
+#endif

@@ -113,6 +113,23 @@ static int search_cap(const char **haystack, const char *needle)
 	return 0;
 }
 
+static int matching_dmac(const char*dmac_req, const char* dmac_inst)
+{
+	char dr, di;
+
+	while ( (dr = *dmac_req) == (di = *dmac_inst) ) {
+		if (dr == '\0')
+			return 0;
+		dmac_req++;
+		dmac_inst++;
+	}
+
+	if ((dr == '\0') && (di == '.'))
+		return 0;
+
+	return 1;
+}
+
 /**
  * request_dma_bycap - Allocate a DMA channel based on its capabilities
  * @dmac: List of DMA controllers to search
@@ -136,7 +153,7 @@ int request_dma_bycap(const char **dmac, const char **caps, const char *dev_id)
 	BUG_ON(!dmac || !caps);
 
 	list_for_each_entry(info, &registered_dmac_list, list)
-		if (strcmp(*dmac, info->name) == 0) {
+		if (matching_dmac(*dmac, info->name) == 0) {
 			found = 1;
 			break;
 		}
@@ -192,8 +209,17 @@ int dmac_search_free_channel(const char *dev_id)
 int request_dma(unsigned int chan, const char *dev_id)
 {
 	struct dma_channel *channel = { 0 };
-	struct dma_info *info = get_dma_info(chan);
+	struct dma_info *info;
 	int result;
+
+#if defined(CONFIG_STM_DMA)
+	if(DMA_REQ_ANY_CHANNEL == chan)
+		return dmac_search_free_channel(dev_id);
+#endif
+
+	info = get_dma_info(chan);
+	if (!info)
+		return -EINVAL;
 
 	channel = get_dma_channel(chan);
 	if (atomic_xchg(&channel->busy, 1))
@@ -284,14 +310,9 @@ int dma_xfer(unsigned int chan, unsigned long from,
 	     unsigned long to, size_t size, unsigned int mode)
 {
 	struct dma_info *info = get_dma_info(chan);
-	struct dma_channel *channel = get_dma_channel(chan);
+	struct dma_channel *channel =  get_dma_channel(chan);
 
-	channel->sar	= from;
-	channel->dar	= to;
-	channel->count	= size;
-	channel->mode	= mode;
-
-	return info->ops->xfer(channel);
+	return info->ops->xfer(channel, from, to, size, mode);
 }
 EXPORT_SYMBOL(dma_xfer);
 
@@ -328,7 +349,7 @@ static int dma_read_proc(char *buf, char **start, off_t off,
 		for (i = 0; i < info->nr_channels; i++) {
 			struct dma_channel *channel = info->channels + i;
 
-			if (!(channel->flags & DMA_CONFIGURED))
+		        if(atomic_read(&channel->busy) == 0)
 				continue;
 
 			p += sprintf(p, "%2d: %14s    %s\n", i,

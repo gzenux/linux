@@ -135,6 +135,17 @@ config TUN
 
 	  If you don't know what to use this for, you don't need it.
 
+config NWHW_CONFIG
+	bool "Configure network hardware from the command line"
+	depends on NETDEVICES
+	---help---
+	  Many network drivers now support hardware level configuration via
+	  utilities such as ifconfig, ethtool and mii-tool. However sometimes
+	  these settings need to be adjusted before a file system is
+	  available (typically if the root file system uses NFS). This
+	  option adds a simple kernel command line interface to configure
+	  some common network parameters.
+
 config NET_SB1000
 	tristate "General Instruments Surfboard 1000"
 	depends on PNP
@@ -882,6 +893,64 @@ config BFIN_MAC_RMII
 	default n
 	help
 	  Use Reduced PHY MII Interface
+
+config SMSC911x
+	tristate "SMSC 911x support"
+	depends on NET_ETHERNET && SUPERH
+	select CRC32
+	---help---
+	  This is a driver for SMSC's 911x series of Ethernet chips,
+	  including the SMSC9118. Say Y if you want it
+	  compiled into the kernel, and read the file
+	  <file:drivers/net/smsc_911x/readme.txt> and the Ethernet-HOWTO,
+	  available from  <http://www.linuxdoc.org/docs.html#howto>.
+
+	  This is a modified version of the driver available from
+	  SMSC: http://www.smsc.com/main/catalog/lan9118.html
+
+	  To compile this driver as a module, choose M here and read
+	  <file:Documentation/networking/net-modules.txt>. The module
+	  will be called smsc911x.
+
+choice
+	depends on SMSC911x
+	prompt "SMSC 911x DMA support"
+	default SMSC911x_DMA_NONE
+
+config SMSC911x_DMA_NONE
+	bool "None"
+	---help---
+	  DMA support is disabled
+
+config SMSC911x_DMA_FIFOSEL
+	bool "Use freerunning 1D DMA and FIFOSEL"
+	---help---
+	  This transfer mode uses freerunning DMA transfers to a linear
+	  block of memory (hence the 1D transfer) which maps onto the
+	  911x's FIFO register. To do this the the FIFOSEL pin must be
+	  connected to EMI address pin A16.
+
+config SMSC911x_DMA_2D
+	bool "Use freerunning 2D DMA"
+	---help---
+	  This transfer mode uses freerunning 2D transfers to the main
+	  911x register bank. This is slightly slower than either of the
+	  other options, because it makes less efficient use of the STbus,
+	  but doesn't require the FIFOSEL pin to be wired up or any
+	  pacing signals.
+
+config SMSC911x_DMA_PACED
+	bool "Use paced non-incrementing DMA"
+	---help---
+	  Enabling this option will cause SMSC 911x DMA receive transfers to
+	  use paced rather than freerunning DMA. This mainly used on boards
+	  which do not have the FIFOSEL pin wired up.
+
+	  To do this the driver needs two pacing signals which are
+	  permanently active, by default this is SSC 1 and 2 Tx empty, but
+	  this may need to be changed if either SSC is in use.
+
+endchoice
 
 config SMC9194
 	tristate "SMC 9194 support"
@@ -2425,6 +2494,8 @@ config ATL1
 
 	  To compile this driver as a module, choose M here.  The module
 	  will be called atl1.
+
+source "drivers/net/stmmac/Kconfig"
 
 endif # NETDEV_1000
 

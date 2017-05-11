@@ -12,8 +12,8 @@
 #include <linux/sys.h>
 #include <linux/linkage.h>
 
-#if !defined(CONFIG_SH_KGDB)
-#define kgdb_handle_exception	debug_trap_handler
+#if !defined(CONFIG_KGDB)
+#define kgdb_exception_handler	debug_trap_handler
 #endif
 
 #if !defined(CONFIG_SH_STANDARD_BIOS)
@@ -25,7 +25,7 @@
 ENTRY(debug_trap_table)
 	.long debug_trap_handler	/* 0x30 */
 	.long debug_trap_handler	/* 0x31 */
-	.long debug_trap_handler	/* 0x32 */
+	.long kgdb_exception_handler	/* 0x32 */
 	.long debug_trap_handler	/* 0x33 */
 	.long debug_trap_handler	/* 0x34 */
 	.long debug_trap_handler	/* 0x35 */
@@ -35,7 +35,7 @@ ENTRY(debug_trap_table)
 	.long debug_trap_handler	/* 0x39 */
 	.long debug_trap_handler	/* 0x3a */
 	.long debug_trap_handler	/* 0x3b */
-	.long kgdb_handle_exception	/* 0x3c */
+	.long kgdb_exception_handler	/* 0x3c */
 	.long debug_trap_handler	/* 0x3d */
 	.long bug_trap_handler		/* 0x3e */
 	.long sh_bios_handler		/* 0x3f */

@@ -24,6 +24,7 @@
 #include <asm/system.h>
 #include <asm/processor.h>
 #include <asm/mmu_context.h>
+#include <asm/cacheflush.h>
 
 /*
  * does not yet catch signals sent when the child dies.
@@ -92,7 +93,12 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	/* when I and D space are separate, these will need to be fixed. */
 	case PTRACE_PEEKTEXT: /* read word at location addr. */
 	case PTRACE_PEEKDATA:
+		/* this is a somewhat over-zealous approach to solving
+		 * access_process_vm's dcache aliasing issues.
+		 */
+		flush_cache_all();
 		ret = generic_ptrace_peekdata(child, addr, data);
+		flush_cache_all();
 		break;
 
 	/* read the word at location addr in the USER area. */
@@ -127,7 +133,12 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	/* when I and D space are separate, this will have to be fixed. */
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA:
+		/* this is a somewhat over-zealous approach to solving
+		 * access_process_vm's dcache aliasing issues.
+		 */
+		flush_cache_all();
 		ret = generic_ptrace_pokedata(child, addr, data);
+		flush_cache_all();
 		break;
 
 	case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
@@ -252,9 +263,15 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 	return ret;
 }
 
-asmlinkage void do_syscall_trace(void)
+asmlinkage void do_syscall_trace(struct pt_regs *regs, int entryexit)
 {
 	struct task_struct *tsk = current;
+
+	if (entryexit)
+		trace_mark(kernel_arch_syscall_entry, "syscall_id %lu ip #p%ld",
+			regs->regs[3], instruction_pointer(regs));
+	else
+		trace_mark(kernel_arch_syscall_exit, MARK_NOARGS);
 
 	if (!test_thread_flag(TIF_SYSCALL_TRACE) &&
 	    !test_thread_flag(TIF_SINGLESTEP))

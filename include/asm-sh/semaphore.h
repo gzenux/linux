@@ -39,6 +39,12 @@ struct semaphore {
 #define DECLARE_MUTEX(name) __DECLARE_SEMAPHORE_GENERIC(name,1)
 #define DECLARE_MUTEX_LOCKED(name) __DECLARE_SEMAPHORE_GENERIC(name,0)
 
+#ifdef CONFIG_KPTRACE_SYNC
+#define __kptrace_inline __attribute__ ((unused)) noinline
+#else
+#define __kptrace_inline inline
+#endif
+
 static inline void sema_init (struct semaphore *sem, int val)
 {
 /*
@@ -76,14 +82,14 @@ asmlinkage void __up(struct semaphore * sem);
 
 extern spinlock_t semaphore_wake_lock;
 
-static inline void down(struct semaphore * sem)
+static __kptrace_inline void down(struct semaphore *sem)
 {
 	might_sleep();
 	if (atomic_dec_return(&sem->count) < 0)
 		__down(sem);
 }
 
-static inline int down_interruptible(struct semaphore * sem)
+static __kptrace_inline int down_interruptible(struct semaphore *sem)
 {
 	int ret = 0;
 
@@ -93,7 +99,7 @@ static inline int down_interruptible(struct semaphore * sem)
 	return ret;
 }
 
-static inline int down_trylock(struct semaphore * sem)
+static __kptrace_inline int down_trylock(struct semaphore *sem)
 {
 	int ret = 0;
 
@@ -106,7 +112,7 @@ static inline int down_trylock(struct semaphore * sem)
  * Note! This is subtle. We jump to wake people up only if
  * the semaphore was negative (== somebody was waiting on it).
  */
-static inline void up(struct semaphore * sem)
+static __kptrace_inline void up(struct semaphore *sem)
 {
 	if (atomic_inc_return(&sem->count) <= 0)
 		__up(sem);

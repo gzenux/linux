@@ -14,11 +14,15 @@ obj-$(CONFIG_VSYSCALL)		+= vsyscall/
 obj-$(CONFIG_SMP)		+= smp.o
 obj-$(CONFIG_CF_ENABLER)	+= cf-enabler.o
 obj-$(CONFIG_SH_STANDARD_BIOS)	+= sh_bios.o
-obj-$(CONFIG_SH_KGDB)		+= kgdb_stub.o kgdb_jmp.o
+obj-$(CONFIG_KGDB)		+= kgdb.o kgdb-jmp.o
 obj-$(CONFIG_SH_CPU_FREQ)	+= cpufreq.o
 obj-$(CONFIG_MODULES)		+= sh_ksyms.o module.o
 obj-$(CONFIG_EARLY_PRINTK)	+= early_printk.o
+#KPROBE-SH
+obj-$(CONFIG_KPROBES)		+= kprobes.o
+#KPROBE-SH
+obj-$(CONFIG_KPTRACE)		+= kptrace.o
 obj-$(CONFIG_KEXEC)		+= machine_kexec.o relocate_kernel.o
 obj-$(CONFIG_CRASH_DUMP)	+= crash_dump.o
-obj-$(CONFIG_PM)		+= pm.o
+obj-$(CONFIG_PM_SH3_FRQCR)	+= pm.o
 obj-$(CONFIG_STACKTRACE)	+= stacktrace.o

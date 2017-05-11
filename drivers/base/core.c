@@ -578,7 +578,12 @@ void device_initialize(struct device *dev)
 	init_MUTEX(&dev->sem);
 	spin_lock_init(&dev->devres_lock);
 	INIT_LIST_HEAD(&dev->devres_head);
-	device_init_wakeup(dev, 0);
+/*
+ *	STMicroelectronics: <francesco virlinzi>
+ *	- commented to allow the initialization
+ *	  in our specific platform file.
+ *	device_init_wakeup(dev, 0);
+ */
 	set_dev_node(dev, -1);
 }
 

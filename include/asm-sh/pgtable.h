@@ -42,8 +42,7 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 
 /* PGD bits */
 #define PGDIR_SHIFT	(PTE_SHIFT + PTE_BITS)
-#define PGDIR_BITS	(32 - PGDIR_SHIFT)
-#define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
+#define PGDIR_SIZE	(1 << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE-1))
 
 /* Entries per level */
@@ -53,9 +52,24 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 #define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
 #define FIRST_USER_ADDRESS	0
 
-#define PTE_PHYS_MASK		(0x20000000 - PAGE_SIZE)
+#ifdef CONFIG_32BIT
+#define PHYS_ADDR_MASK		0xffffffff
+#else
+#define PHYS_ADDR_MASK		0x1fffffff
+#endif
 
-#define VMALLOC_START	(P3SEG)
+#define PTE_PHYS_MASK		(PHYS_ADDR_MASK & PAGE_MASK)
+
+/*
+ * P3 usage:
+ * First 1MB map is used by fixed purpose.
+ * Currently only 4-entry (16kB) is used (see arch/sh/mm/cache.c)
+ * Then consistent allocations (32 bit mode only), vmalloc and finally
+ * fixmap.
+ */
+#define CONSISTENT_BASE	(P3SEG+0x00100000)
+#define CONSISTENT_END	(P3SEG+0x01000000)
+#define VMALLOC_START	CONSISTENT_END
 #define VMALLOC_END	(FIXADDR_START-2*PAGE_SIZE)
 
 /*
@@ -79,8 +93,8 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
  * - Bits 10 and 11 are low bits of the PPN that are reserved on >= 4K pages.
  *   Bit 10 is used for _PAGE_ACCESSED, bit 11 remains unused.
  *
- * - Bits 31, 30, and 29 remain unused by everyone and can be used for future
- *   software flags, although care must be taken to update _PAGE_CLEAR_FLAGS.
+ * - On 29 bit platforms, bits 31 to 29 are used for the space attributes
+ *   and timing control which (together with bit 0) are moved into PTEA.
  *
  * XXX: Leave the _PAGE_FILE and _PAGE_WT overhaul for a rainy day.
  *
@@ -100,16 +114,17 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 #define _PAGE_HW_SHARED	0x002		/* SH-bit  : shared among processes */
 #define _PAGE_DIRTY	0x004		/* D-bit   : page changed */
 #define _PAGE_CACHABLE	0x008		/* C-bit   : cachable */
-#ifndef CONFIG_X2TLB
-# define _PAGE_SZ0	0x010		/* SZ0-bit : Size of page */
-# define _PAGE_RW	0x020		/* PR0-bit : write access allowed */
-# define _PAGE_USER	0x040		/* PR1-bit : user space access allowed*/
-# define _PAGE_SZ1	0x080		/* SZ1-bit : Size of page (on SH-4) */
-#endif
+#define _PAGE_SZ0	0x010		/* SZ0-bit : Size of page */
+#define _PAGE_RW	0x020		/* PR0-bit : write access allowed */
+#define _PAGE_USER	0x040		/* PR1-bit : user space access allowed*/
+#define _PAGE_SZ1	0x080		/* SZ1-bit : Size of page (on SH-4) */
 #define _PAGE_PRESENT	0x100		/* V-bit   : page is valid */
 #define _PAGE_PROTNONE	0x200		/* software: if not present  */
 #define _PAGE_ACCESSED	0x400		/* software: page referenced */
 #define _PAGE_FILE	_PAGE_WT	/* software: pagecache or swap? */
+
+#define _PAGE_SZ_MASK	(_PAGE_SZ0 | _PAGE_SZ1)
+#define _PAGE_PR_MASK	(_PAGE_RW | _PAGE_USER)
 
 /* Extended mode bits */
 #define _PAGE_EXT_ESZ0		0x0010	/* ESZ0-bit: Size of page */
@@ -126,12 +141,9 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 #define _PAGE_EXT_KERN_READ	0x2000	/* EPR5-bit: Kernel space readable */
 
 /* Wrapper for extended mode pgprot twiddling */
-#ifdef CONFIG_X2TLB
-# define _PAGE_EXT(x)		((unsigned long long)(x) << 32)
-#else
-# define _PAGE_EXT(x)		(0)
-#endif
+#define _PAGE_EXT(x)		((unsigned long long)(x) << 32)
 
+#ifndef CONFIG_32BIT
 /* software: moves to PTEA.TC (Timing Control) */
 #define _PAGE_PCC_AREA5	0x00000000	/* use BSC registers for area5 */
 #define _PAGE_PCC_AREA6	0x80000000	/* use BSC registers for area6 */
@@ -144,17 +156,22 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 #define _PAGE_PCC_COM16	0x40000001	/* Common Memory space, 16 bit bus */
 #define _PAGE_PCC_ATR8	0x60000000	/* Attribute Memory space, 8 bit bus */
 #define _PAGE_PCC_ATR16	0x60000001	/* Attribute Memory space, 6 bit bus */
+#endif
 
 /* Mask which drops unused bits from the PTEL value */
-#ifdef CONFIG_CPU_SH3
+#if defined(CONFIG_CPU_SH3)
 #define _PAGE_CLEAR_FLAGS	(_PAGE_PROTNONE | _PAGE_ACCESSED| \
 				 _PAGE_FILE	| _PAGE_SZ1	| \
 				 _PAGE_HW_SHARED)
+#elif defined(CONFIG_X2TLB)
+/* Get rid of the legacy PR/SZ bits when using extended mode */
+#define _PAGE_CLEAR_FLAGS	(_PAGE_PROTNONE | _PAGE_ACCESSED | \
+				 _PAGE_FILE | _PAGE_PR_MASK | _PAGE_SZ_MASK)
 #else
 #define _PAGE_CLEAR_FLAGS	(_PAGE_PROTNONE | _PAGE_ACCESSED | _PAGE_FILE)
 #endif
 
-#define _PAGE_FLAGS_HARDWARE_MASK	(0x1fffffff & ~(_PAGE_CLEAR_FLAGS))
+#define _PAGE_FLAGS_HARDWARE_MASK	(PHYS_ADDR_MASK & ~(_PAGE_CLEAR_FLAGS))
 
 /* Hardware flags, page size encoding */
 #if defined(CONFIG_X2TLB)
@@ -212,27 +229,36 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 
 #define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | \
 				 _PAGE_CACHABLE | _PAGE_FLAGS_HARD | \
-				 _PAGE_EXT(_PAGE_EXT_USER_READ | \
+				 _PAGE_EXT(_PAGE_EXT_KERN_READ  | \
+					   _PAGE_EXT_KERN_WRITE | \
+					   _PAGE_EXT_USER_READ  | \
 					   _PAGE_EXT_USER_WRITE))
 
 #define PAGE_EXECREAD	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | \
 				 _PAGE_CACHABLE | _PAGE_FLAGS_HARD | \
-				 _PAGE_EXT(_PAGE_EXT_USER_EXEC | \
+				 _PAGE_EXT(_PAGE_EXT_KERN_EXEC | \
+					   _PAGE_EXT_KERN_READ | \
+					   _PAGE_EXT_USER_EXEC | \
 					   _PAGE_EXT_USER_READ))
 
 #define PAGE_COPY	PAGE_EXECREAD
 
 #define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | \
 				 _PAGE_CACHABLE | _PAGE_FLAGS_HARD | \
-				 _PAGE_EXT(_PAGE_EXT_USER_READ))
+				 _PAGE_EXT(_PAGE_EXT_KERN_READ | \
+					   _PAGE_EXT_USER_READ))
 
 #define PAGE_WRITEONLY	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | \
 				 _PAGE_CACHABLE | _PAGE_FLAGS_HARD | \
-				 _PAGE_EXT(_PAGE_EXT_USER_WRITE))
+				 _PAGE_EXT(_PAGE_EXT_KERN_WRITE | \
+					   _PAGE_EXT_USER_WRITE))
 
 #define PAGE_RWX	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | \
 				 _PAGE_CACHABLE | _PAGE_FLAGS_HARD | \
-				 _PAGE_EXT(_PAGE_EXT_USER_WRITE | \
+				 _PAGE_EXT(_PAGE_EXT_KERN_WRITE | \
+					   _PAGE_EXT_KERN_READ  | \
+					   _PAGE_EXT_KERN_EXEC  | \
+					   _PAGE_EXT_USER_WRITE | \
 					   _PAGE_EXT_USER_READ  | \
 					   _PAGE_EXT_USER_EXEC))
 
@@ -373,11 +399,15 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 #define set_pmd(pmdptr, pmdval) (*(pmdptr) = pmdval)
 
 #define pte_pfn(x)		((unsigned long)(((x).pte_low >> PAGE_SHIFT)))
-#define pfn_pte(pfn, prot)	__pte(((pfn) << PAGE_SHIFT) | pgprot_val(prot))
-#define pfn_pmd(pfn, prot)	__pmd(((pfn) << PAGE_SHIFT) | pgprot_val(prot))
 
-#define pte_none(x)	(!pte_val(x))
-#define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
+#define pfn_pte(pfn, prot) \
+	__pte(((unsigned long long)(pfn) << PAGE_SHIFT) | pgprot_val(prot))
+#define pfn_pmd(pfn, prot) \
+	__pmd(((unsigned long long)(pfn) << PAGE_SHIFT) | pgprot_val(prot))
+
+#define pte_none(x)		(!pte_val(x))
+#define pte_present(x)		((x).pte_low & (_PAGE_PRESENT | _PAGE_PROTNONE))
+
 #define pte_clear(mm,addr,xp) do { set_pte_at(mm, addr, xp, __pte(0)); } while (0)
 
 #define pmd_none(x)	(!pmd_val(x))
@@ -386,21 +416,21 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 #define	pmd_bad(x)	(pmd_val(x) & ~PAGE_MASK)
 
 #define pages_to_mb(x)	((x) >> (20-PAGE_SHIFT))
-#define pte_page(x)	phys_to_page(pte_val(x)&PTE_PHYS_MASK)
+#define pte_page(x)	pfn_to_page(pte_pfn(x))
 
 /*
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-#define pte_not_present(pte)	(!(pte_val(pte) & _PAGE_PRESENT))
-#define pte_dirty(pte)		(pte_val(pte) & _PAGE_DIRTY)
-#define pte_young(pte)		(pte_val(pte) & _PAGE_ACCESSED)
-#define pte_file(pte)		(pte_val(pte) & _PAGE_FILE)
+#define pte_not_present(pte)	(!((pte).pte_low & _PAGE_PRESENT))
+#define pte_dirty(pte)		((pte).pte_low & _PAGE_DIRTY)
+#define pte_young(pte)		((pte).pte_low & _PAGE_ACCESSED)
+#define pte_file(pte)		((pte).pte_low & _PAGE_FILE)
 
 #ifdef CONFIG_X2TLB
 #define pte_write(pte)		((pte).pte_high & _PAGE_EXT_USER_WRITE)
 #else
-#define pte_write(pte)		(pte_val(pte) & _PAGE_RW)
+#define pte_write(pte)		((pte).pte_low & _PAGE_RW)
 #endif
 
 #define PTE_BIT_FUNC(h,fn,op) \
@@ -429,50 +459,43 @@ PTE_BIT_FUNC(low, mkyoung, |= _PAGE_ACCESSED);
 /*
  * Macro and implementation to make a page protection as uncachable.
  */
-#define pgprot_noncached pgprot_noncached
+#define pgprot_writecombine(prot) \
+	__pgprot(pgprot_val(prot) & ~_PAGE_CACHABLE)
 
-static inline pgprot_t pgprot_noncached(pgprot_t _prot)
-{
-	unsigned long prot = pgprot_val(_prot);
+#define pgprot_noncached	 pgprot_writecombine
 
-	prot &= ~_PAGE_CACHABLE;
-	return __pgprot(prot);
-}
-
-#define pgprot_writecombine(prot) __pgprot(pgprot_val(prot) & ~_PAGE_CACHABLE)
-
-/*
- * Conversion functions: convert a page and protection to a page entry,
- * and a page entry and page directory to the page they refer to.
- *
- * extern pte_t mk_pte(struct page *page, pgprot_t pgprot)
- */
+/* Convert a page and protection to a page entry */
 #define mk_pte(page, pgprot)	pfn_pte(page_to_pfn(page), (pgprot))
 
 static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 {
-	set_pte(&pte, __pte((pte_val(pte) & _PAGE_CHG_MASK) |
-			    pgprot_val(newprot)));
+	pte.pte_low &= _PAGE_CHG_MASK;
+	pte.pte_low |= pgprot_val(newprot);
+
+#ifdef CONFIG_X2TLB
+	pte.pte_high |= pgprot_val(newprot) >> 32;
+#endif
+
 	return pte;
 }
 
-#define pmd_page_vaddr(pmd)	pmd_val(pmd)
+#define pmd_page_vaddr(pmd)	((unsigned long)pmd_val(pmd))
 #define pmd_page(pmd)		(virt_to_page(pmd_val(pmd)))
 
 /* to find an entry in a page-table-directory. */
-#define pgd_index(address) (((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
-#define pgd_offset(mm, address) ((mm)->pgd+pgd_index(address))
+#define pgd_index(address)	(((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
+#define pgd_offset(mm, address)	((mm)->pgd+pgd_index(address))
 
 /* to find an entry in a kernel page-table-directory */
-#define pgd_offset_k(address) pgd_offset(&init_mm, address)
+#define pgd_offset_k(address)	pgd_offset(&init_mm, address)
 
 /* Find an entry in the third-level page table.. */
-#define pte_index(address) \
-		((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
+#define pte_index(address)	((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
 #define pte_offset_kernel(dir, address) \
 	((pte_t *) pmd_page_vaddr(*(dir)) + pte_index(address))
-#define pte_offset_map(dir, address) pte_offset_kernel(dir, address)
-#define pte_offset_map_nested(dir, address) pte_offset_kernel(dir, address)
+#define pte_offset_map(dir, address)		pte_offset_kernel(dir, address)
+#define pte_offset_map_nested(dir, address)	pte_offset_kernel(dir, address)
+
 #define pte_unmap(pte)		do { } while (0)
 #define pte_unmap_nested(pte)	do { } while (0)
 
@@ -480,13 +503,14 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 #define pte_ERROR(e) \
 	printk("%s:%d: bad pte %p(%08lx%08lx).\n", __FILE__, __LINE__, \
 	       &(e), (e).pte_high, (e).pte_low)
+#define pgd_ERROR(e) \
+	printk("%s:%d: bad pgd %016llx.\n", __FILE__, __LINE__, pgd_val(e))
 #else
 #define pte_ERROR(e) \
 	printk("%s:%d: bad pte %08lx.\n", __FILE__, __LINE__, pte_val(e))
-#endif
-
 #define pgd_ERROR(e) \
 	printk("%s:%d: bad pgd %08lx.\n", __FILE__, __LINE__, pgd_val(e))
+#endif
 
 struct vm_area_struct;
 extern void update_mmu_cache(struct vm_area_struct * vma,
@@ -562,11 +586,6 @@ struct mm_struct;
 #ifndef CONFIG_MMU
 extern unsigned int kobjsize(const void *objp);
 #endif /* !CONFIG_MMU */
-
-#if defined(CONFIG_CPU_SH4) || defined(CONFIG_SH7705_CACHE_32KB)
-#define __HAVE_ARCH_PTEP_GET_AND_CLEAR
-extern pte_t ptep_get_and_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep);
-#endif
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 extern void paging_init(void);

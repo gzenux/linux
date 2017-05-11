@@ -12,7 +12,11 @@
 /* .data section */
 #define DATA_DATA							\
 	*(.data)							\
-	*(.data.init.refok)
+	*(.data.init.refok)						\
+	. = ALIGN(8);							\
+	VMLINUX_SYMBOL(__start___markers) = .;				\
+	*(__markers)							\
+	VMLINUX_SYMBOL(__stop___markers) = .;
 
 #define RO_DATA(align)							\
 	. = ALIGN((align));						\
@@ -20,6 +24,11 @@
 		VMLINUX_SYMBOL(__start_rodata) = .;			\
 		*(.rodata) *(.rodata.*)					\
 		*(__vermagic)		/* Kernel version magic */	\
+		*(__markers_strings)	/* Markers: strings */		\
+		. = ALIGN(8);						\
+		VMLINUX_SYMBOL(__start___immediate) = .;		\
+		*(__immediate)		/* Immediate values: pointers */ \
+		VMLINUX_SYMBOL(__stop___immediate) = .;			\
 	}								\
 									\
 	.rodata1          : AT(ADDR(.rodata1) - LOAD_OFFSET) {		\
@@ -50,6 +59,36 @@
 		VMLINUX_SYMBOL(__start_rio_route_ops) = .;		\
 		*(.rio_route_ops)					\
 		VMLINUX_SYMBOL(__end_rio_route_ops) = .;		\
+	}								\
+									\
+	/* Kernel ELF hash symbol table: Normal symbols */		\
+	__ksymtab.htable         : AT(ADDR(__ksymtab.htable) - LOAD_OFFSET) {\
+		VMLINUX_SYMBOL(__start___ksymtab_htable) = .;		\
+		*(__ksymtab.htable)					\
+	}								\
+									\
+	/* Kernel ELF hash symbol table: GPL-only symbols */		\
+	__ksymtab_gpl.htable  : AT(ADDR(__ksymtab_gpl.htable) - LOAD_OFFSET) { \
+		VMLINUX_SYMBOL(__start___ksymtab_gpl_htable) = .;	\
+		*(__ksymtab_gpl.htable)					\
+	}								\
+									\
+	/* Kernel ELF hash symbol table: GPL-future-only symbols */	\
+	__ksymtab_gpl_future.htable : AT(ADDR(__ksymtab_gpl_future.htable) - LOAD_OFFSET) {\
+		VMLINUX_SYMBOL(__start___ksymtab_gpl_future_htable) = .;\
+		*(__ksymtab_gpl_future.htable)				\
+	}								\
+									\
+	/* Kernel ELF hash symbol table: Normal unused symbols */	\
+	__ksymtab_unused.htable : AT(ADDR(__ksymtab_unused.htable) - LOAD_OFFSET) { \
+		VMLINUX_SYMBOL(__start___ksymtab_unused_htable) = .;	\
+		*(__ksymtab_unused.htable)				\
+	}								\
+									\
+	/* Kernel ELF hash symbol table: GPL-only unused symbols */	\
+	__ksymtab_unused_gpl.htable : AT(ADDR(__ksymtab_unused_gpl.htable) - LOAD_OFFSET) {	\
+		VMLINUX_SYMBOL(__start___ksymtab_unused_gpl_htable) = .;\
+		*(__ksymtab_unused_gpl.htable)				\
 	}								\
 									\
 	/* Kernel symbol table: Normal symbols */			\

@@ -24,6 +24,34 @@ static int jffs2_compression_mode = JFFS2_COMPR_MODE_PRIORITY;
 /* Statistics for blocks stored without compression */
 static uint32_t none_stat_compr_blocks=0,none_stat_decompr_blocks=0,none_stat_compr_size=0;
 
+
+/*
+ * Return 1 to use this compression
+ */
+static int jffs2_is_best_compression(struct jffs2_compressor *this,
+		struct jffs2_compressor *best, uint32_t size, uint32_t bestsize)
+{
+	switch (jffs2_compression_mode) {
+	case JFFS2_COMPR_MODE_SIZE:
+		if (bestsize > size)
+			return 1;
+		return 0;
+	case JFFS2_COMPR_MODE_FAVOURLZO:
+		if ((this->compr == JFFS2_COMPR_LZO) && (bestsize > size))
+			return 1;
+		if ((best->compr != JFFS2_COMPR_LZO) && (bestsize > size))
+			return 1;
+		if ((this->compr == JFFS2_COMPR_LZO) && (bestsize > (size * FAVOUR_LZO_PERCENT / 100)))
+			return 1;
+		if ((bestsize * FAVOUR_LZO_PERCENT / 100) > size)
+			return 1;
+
+		return 0;
+	}
+	/* Shouldn't happen */
+	return 0;
+}
+
 /* jffs2_compress:
  * @data: Pointer to uncompressed data
  * @cdata: Pointer to returned pointer to buffer for compressed data
@@ -285,6 +313,9 @@ int __init jffs2_compressors_init(void)
         jffs2_rubinmips_init();
         jffs2_dynrubin_init();
 #endif
+#ifdef CONFIG_JFFS2_LZO
+	jffs2_lzo_init();
+#endif
 /* Setting default compression mode */
 #ifdef CONFIG_JFFS2_CMODE_NONE
         jffs2_compression_mode = JFFS2_COMPR_MODE_NONE;
@@ -303,6 +334,9 @@ int __init jffs2_compressors_init(void)
 int jffs2_compressors_exit(void)
 {
 /* Unregistering compressors */
+#ifdef CONFIG_JFFS2_LZO
+	jffs2_lzo_exit();
+#endif
 #ifdef CONFIG_JFFS2_RUBIN
         jffs2_dynrubin_exit();
         jffs2_rubinmips_exit();

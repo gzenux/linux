@@ -654,4 +654,61 @@ config I2C_PMCMSP
 	  This driver can also be built as module. If so, the module
 	  will be called i2c-pmcmsp.
 
+choice
+	prompt "STMicroelectronics I2C support"
+	depends on I2C && CPU_SUBTYPE_ST40
+	help
+	  STMicroelectronics SoCs support the I2C bus using either a bit-banging
+	  PIO driver or using the hardware SSC.
+
+config I2C_ST40_PIO
+	tristate "I2C bit-banging PIO driver"
+	select I2C_ALGOBIT
+	help
+	  If you say yes to this option, support will be included for the
+	  PIO driven I2C in bit-banging mode.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called i2c-st40-pio
+
+config I2C_STM
+	tristate "I2C hardware SSC driver"
+	help
+	  If you say yes to this option, support will be included for the
+	  SSC driven I2C.
+
+endchoice
+
+config I2C_STM_GLITCH_SUPPORT
+        bool "I2C timing glitch suppression support"
+        depends on I2C_STM
+        help
+          Enable this option to add timing glitch suppression support in the
+          STM I2C (SSC) device driver.
+          You can set the glitch width in nanosecond (on both clock and data)
+          or use the default value of 500ns.
+
+config GLITCH_CLK_WIDTH
+        depends on I2C_STM_GLITCH_SUPPORT
+        int "Glitch clock width in ns"
+        default "500"
+
+config GLITCH_DATA_WIDTH
+        depends on I2C_STM_GLITCH_SUPPORT
+        int "Glitch data width in ns"
+        default "500"
+
+config I2C_STM_HW_GLITCH
+        bool "I2C filter glitch suppression support"
+        depends on I2C_STM
+        help
+          Enable this option to add filter glitch suppression support in the
+          STM I2C (SSC) device driver.
+          Set the glitch width in MICROSECONDS or use the default value of 1uS.
+
+config HW_GLITCH_WIDTH
+        depends on I2C_STM_HW_GLITCH
+        int "Glitch suppression width in uS"
+        default "1"
+
 endmenu

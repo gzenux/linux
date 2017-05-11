@@ -81,7 +81,11 @@ __mutex_lock_slowpath(atomic_t *lock_count);
  *
  * This function is similar to (but not equivalent to) down().
  */
+#ifdef CONFIG_KPTRACE_SYNC
+void fastcall __sched noinline mutex_lock(struct mutex *lock)
+#else
 void inline fastcall __sched mutex_lock(struct mutex *lock)
+#endif
 {
 	might_sleep();
 	/*

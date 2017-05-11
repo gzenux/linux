@@ -22,7 +22,7 @@
    occurrence should be flagged as an error.  */
 /* But... */
 /* XXX: This is not applicable to SuperH, just needed for alloc_bootmem */
-#define MAX_DMA_ADDRESS		(PAGE_OFFSET+0x10000000)
+#define MAX_DMA_ADDRESS		(PAGE_OFFSET+0x1fffffff)
 
 #ifdef CONFIG_NR_DMA_CHANNELS
 #  define MAX_DMA_CHANNELS	(CONFIG_NR_DMA_CHANNELS)
@@ -71,13 +71,18 @@ struct dma_ops {
 	void (*free)(struct dma_channel *chan);
 
 	int (*get_residue)(struct dma_channel *chan);
-	int (*xfer)(struct dma_channel *chan);
+	int (*xfer)(struct dma_channel *chan, unsigned long sar,
+		    unsigned long dar, size_t count, unsigned int mode);
 	int (*configure)(struct dma_channel *chan, unsigned long flags);
 	int (*extend)(struct dma_channel *chan, unsigned long op, void *param);
 };
 
+struct dma_info;
+
 struct dma_channel {
 	char dev_id[16];		/* unique name per DMAC of channel */
+
+	struct dma_info *info;	/* SIM: can this be simply dma_ops? */
 
 	unsigned int chan;		/* DMAC channel number */
 	unsigned int vchan;		/* Virtual channel number */
@@ -152,19 +157,18 @@ extern struct dma_info *get_dma_info_by_name(const char *dmac_name);
 extern int dma_extend(unsigned int chan, unsigned long op, void *param);
 extern int register_chan_caps(const char *dmac, struct dma_chan_caps *capslist);
 
-#ifdef CONFIG_SYSFS
 /* arch/sh/drivers/dma/dma-sysfs.c */
 extern int dma_create_sysfs_files(struct dma_channel *, struct dma_info *);
 extern void dma_remove_sysfs_files(struct dma_channel *, struct dma_info *);
-#else
-#define dma_create_sysfs_file(channel, info)		do { } while (0)
-#define dma_remove_sysfs_file(channel, info)		do { } while (0)
-#endif
 
 #ifdef CONFIG_PCI
 extern int isa_dma_bridge_buggy;
 #else
 #define isa_dma_bridge_buggy	(0)
+#endif
+
+#ifdef CONFIG_STM_DMA
+#define DMA_REQ_ANY_CHANNEL 0xf0f0f0f0
 #endif
 
 #endif /* __KERNEL__ */

@@ -37,7 +37,7 @@
 #include <linux/hdreg.h>
 #include <linux/spinlock.h>
 #include <linux/compat.h>
-#include <linux/blktrace_api.h>
+#include <linux/marker.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
@@ -2504,7 +2504,7 @@ after_error_processing:
 	}
 	cmd->rq->data_len = 0;
 	cmd->rq->completion_data = cmd;
-	blk_add_trace_rq(cmd->rq->q, cmd->rq, BLK_TA_COMPLETE);
+	trace_mark(blk_request_complete, "%p %p", cmd->rq->q, cmd->rq);
 	blk_complete_request(cmd->rq);
 }
 

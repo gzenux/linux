@@ -27,5 +27,7 @@ obj-$(CONFIG_MTD_NAND_AT91)		+= at91_nand.o
 obj-$(CONFIG_MTD_NAND_CM_X270)		+= cmx270_nand.o
 obj-$(CONFIG_MTD_NAND_BASLER_EXCITE)	+= excite_nandflash.o
 obj-$(CONFIG_MTD_NAND_PLATFORM)		+= plat_nand.o
+obj-$(CONFIG_MTD_NAND_STM_EMI)		+= stm_nand_emi.o
+obj-$(CONFIG_MTD_NAND_STM_FLEX)		+= stm_nand_flex.o stm_nand_ecc.o
 
 nand-objs := nand_base.o nand_bbt.o

@@ -750,10 +750,14 @@ void put_bus(struct bus_type * bus)
  *
  *	Note that kset_find_obj increments bus' reference count.
  */
-#if 0
-struct bus_type * find_bus(char * name)
+#if 1
+/*
+ *	STMicroelectronics: <francesco virlinzi>
+ *	- required by pms
+ */
+struct bus_type *find_bus(char *name)
 {
-	struct kobject * k = kset_find_obj(&bus_subsys.kset, name);
+	struct kobject *k = kset_find_obj(&bus_subsys, name);
 	return k ? to_bus(k) : NULL;
 }
 #endif  /*  0  */

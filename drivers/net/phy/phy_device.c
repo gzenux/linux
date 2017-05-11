@@ -44,6 +44,16 @@ static struct phy_driver genphy_driver;
 extern int mdio_bus_init(void);
 extern void mdio_bus_exit(void);
 
+void phy_device_free(struct phy_device *phydev)
+{
+	kfree(phydev);
+}
+
+static void phy_device_release(struct device *dev)
+{
+	phy_device_free(to_phy_device(dev));
+}
+
 struct phy_device* phy_device_create(struct mii_bus *bus, int addr, int phy_id)
 {
 	struct phy_device *dev;
@@ -53,6 +63,8 @@ struct phy_device* phy_device_create(struct mii_bus *bus, int addr, int phy_id)
 
 	if (NULL == dev)
 		return (struct phy_device*) PTR_ERR((void*)-ENOMEM);
+
+	dev->dev.release = phy_device_release;
 
 	dev->speed = 0;
 	dev->duplex = -1;
@@ -105,8 +117,21 @@ struct phy_device * get_phy_device(struct mii_bus *bus, int addr)
 
 	phy_id |= (phy_reg & 0xffff);
 
-	/* If the phy_id is all Fs, there is no device there */
-	if (0xffffffff == phy_id)
+	/* A non-existent phy should return 0xffffffff as the bus
+	 * pull-ups should mean that all signals are high. Unfortunately
+	 * broken board designs can allow some lines to float or even
+	 * return 0.  Therefore we test for the most obvious problems...
+	 */
+	if ((phy_id & 0x1fffffff) == 0x1fffffff || phy_id == 0)
+		return NULL;
+
+	/*
+	* Broken hardware is sometimes missing the pull down resistor on the
+	* MDIO line, which results in reads to non-existent devices returning
+	* 0 rather than 0xffff. Catch this here and treat 0 as a non-existent
+	* device as well.
+	*/
+	if (phy_id == 0)
 		return NULL;
 
 	dev = phy_device_create(bus, addr, phy_id);
@@ -616,6 +641,36 @@ static int genphy_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+int genphy_suspend(struct phy_device *phydev)
+{
+	int value;
+
+	spin_lock_bh(&phydev->lock);
+
+	value = phy_read(phydev, MII_BMCR);
+	phy_write(phydev, MII_BMCR, (value | BMCR_PDOWN));
+
+	spin_unlock_bh(&phydev->lock);
+
+	return 0;
+}
+EXPORT_SYMBOL(genphy_suspend);
+
+int genphy_resume(struct phy_device *phydev)
+{
+	int value;
+
+	spin_lock_bh(&phydev->lock);
+
+	value = phy_read(phydev, MII_BMCR);
+	phy_write(phydev, MII_BMCR, (value & ~BMCR_PDOWN));
+
+	spin_unlock_bh(&phydev->lock);
+
+	return 0;
+}
+
+EXPORT_SYMBOL(genphy_resume);
 
 /**
  * phy_probe - probe and init a PHY device
@@ -690,8 +745,9 @@ static int phy_remove(struct device *dev)
 int phy_driver_register(struct phy_driver *new_driver)
 {
 	int retval;
-
-	memset(&new_driver->driver, 0, sizeof(new_driver->driver));
+/*
+ *	memset(&new_driver->driver, 0, sizeof(new_driver->driver));
+ */
 	new_driver->driver.name = new_driver->name;
 	new_driver->driver.bus = &mdio_bus_type;
 	new_driver->driver.probe = phy_probe;
@@ -726,6 +782,8 @@ static struct phy_driver genphy_driver = {
 	.features	= 0,
 	.config_aneg	= genphy_config_aneg,
 	.read_status	= genphy_read_status,
+	.suspend	= genphy_suspend,
+	.resume		= genphy_resume,
 	.driver		= {.owner= THIS_MODULE, },
 };
 

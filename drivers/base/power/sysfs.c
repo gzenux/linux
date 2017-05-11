@@ -6,7 +6,66 @@
 #include <linux/string.h>
 #include "power.h"
 
+/**
+ *      state - Control current power state of device
+ *
+ *      show() returns the current power state of the device. '0' indicates
+ *      the device is on. Other values (1-3) indicate the device is in a low
+ *      power state.
+ *
+ *      store() sets the current power state, which is an integer value
+ *      between 0-3. If the device is on ('0'), and the value written is
+ *      greater than 0, then the device is placed directly into the low-power
+ *      state (via its driver's ->suspend() method).
+ *      If the device is currently in a low-power state, and the value is 0,
+ *      the device is powered back on (via the ->resume() method).
+ *      If the device is in a low-power state, and a different low-power state
+ *      is requested, the device is first resumed, then suspended into the new
+ *      low-power state.
+ */
+#ifdef CONFIG_PM_SLEEP
+static ssize_t state_show(struct device *dev, struct device_attribute *attr,
+	char *buf)
+{
+	if (dev->power.power_state.event)
+		return sprintf(buf, "off\n");
+	else
+		return sprintf(buf, "on\n");
+}
 
+static ssize_t state_store(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t n)
+{
+	int error = -EINVAL;
+
+	if ((n == 1) && (!strcmp(buf, "3") || !strcmp(buf, "2"))) {
+		/* suspend the device... */
+		error = suspend_device(dev, PMSG_SUSPEND);
+		/* ...and moves into the inactive list... */
+		if (!error) {
+			dev->power.power_state.event = PM_EVENT_SUSPEND;
+			mutex_lock(&dpm_list_mtx);
+			list_move(&dev->power.entry, &dpm_off);
+			mutex_unlock(&dpm_list_mtx);
+		}
+	}
+
+	if ((n == 1) && !strcmp(buf, "0")) {
+		/* resumes the device... */
+		resume_device(dev);
+		dev->power.power_state.event = PM_EVENT_ON;
+		/* ...and moves into the active list...*/
+		mutex_lock(&dpm_list_mtx);
+		list_move_tail(&dev->power.entry, &dpm_active);
+		mutex_unlock(&dpm_list_mtx);
+		error = 0;
+	}
+
+	return error ? error : n;
+}
+
+static DEVICE_ATTR(state, 0644, state_show, state_store);
+#endif
 /*
  *	wakeup - Report/change current wakeup option for device
  *
@@ -80,6 +139,9 @@ static DEVICE_ATTR(wakeup, 0644, wake_show, wake_store);
 
 
 static struct attribute * power_attrs[] = {
+#ifdef CONFIG_PM_SLEEP
+	&dev_attr_state.attr,
+#endif
 	&dev_attr_wakeup.attr,
 	NULL,
 };

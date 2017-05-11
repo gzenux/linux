@@ -33,6 +33,16 @@
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))
 
 /*
+ * The following define adds a 64 byte gap between the signal
+ * stack frame and previous contents of the stack.  This allows
+ * frame unwinding in a function epilogue but only if a frame
+ * pointer is used in the function.  This is necessary because
+ * current gcc compilers (<4.3) do not generate unwind info on
+ * SH for function epilogues.
+ */
+#define UNWINDGUARD 64
+
+/*
  * Atomically swap in the new signal mask, and wait for a signal.
  */
 asmlinkage int
@@ -316,7 +326,7 @@ get_sigframe(struct k_sigaction *ka, unsigned long sp, size_t frame_size)
 			sp = current->sas_ss_sp + current->sas_ss_size;
 	}
 
-	return (void __user *)((sp - frame_size) & -8ul);
+	return (void __user *)((sp - (frame_size+UNWINDGUARD)) & -8ul);
 }
 
 /* These symbols are defined with the addresses in the vsyscall page.
@@ -367,6 +377,7 @@ static int setup_frame(int sig, struct k_sigaction *ka,
 		err |= __put_user(OR_R0_R0, &frame->retcode[6]);
 		err |= __put_user((__NR_sigreturn), &frame->retcode[7]);
 		regs->pr = (unsigned long) frame->retcode;
+		flush_icache_range(regs->pr, regs->pr + sizeof(frame->retcode));
 	}
 
 	if (err)
@@ -383,11 +394,6 @@ static int setup_frame(int sig, struct k_sigaction *ka,
 
 	pr_debug("SIG deliver (%s:%d): sp=%p pc=%08lx pr=%08lx\n",
 		 current->comm, current->pid, frame, regs->pc, regs->pr);
-
-	flush_cache_sigtramp(regs->pr);
-
-	if ((-regs->pr & (L1_CACHE_BYTES-1)) < sizeof(frame->retcode))
-		flush_cache_sigtramp(regs->pr + L1_CACHE_BYTES);
 
 	return 0;
 
@@ -464,10 +470,7 @@ static int setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	pr_debug("SIG deliver (%s:%d): sp=%p pc=%08lx pr=%08lx\n",
 		 current->comm, current->pid, frame, regs->pc, regs->pr);
 
-	flush_cache_sigtramp(regs->pr);
-
-	if ((-regs->pr & (L1_CACHE_BYTES-1)) < sizeof(frame->retcode))
-		flush_cache_sigtramp(regs->pr + L1_CACHE_BYTES);
+	flush_icache_range(regs->pr, regs->pr + sizeof(frame->retcode));
 
 	return 0;
 
@@ -507,26 +510,6 @@ handle_signal(unsigned long sig, struct k_sigaction *ka, siginfo_t *info,
 						ctrl_inw(regs->pc - 4));
 				break;
 		}
-	} else {
-		/* gUSA handling */
-#ifdef CONFIG_PREEMPT
-		unsigned long flags;
-
-		local_irq_save(flags);
-#endif
-		if (regs->regs[15] >= 0xc0000000) {
-			int offset = (int)regs->regs[15];
-
-			/* Reset stack pointer: clear critical region mark */
-			regs->regs[15] = regs->regs[1];
-			if (regs->pc < regs->regs[0])
-				/* Go to rewind point #1 */
-				regs->pc = regs->regs[0] + offset -
-					instruction_size(ctrl_inw(regs->pc-4));
-		}
-#ifdef CONFIG_PREEMPT
-		local_irq_restore(flags);
-#endif
 	}
 
 	/* Set up the stack frame */

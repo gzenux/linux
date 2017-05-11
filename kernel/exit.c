@@ -178,6 +178,7 @@ repeat:
 	write_unlock_irq(&tasklist_lock);
 	proc_flush_task(p);
 	release_thread(p);
+	trace_mark(kernel_process_free, "pid %d", p->pid);
 	call_rcu(&p->rcu, delayed_put_task_struct);
 
 	p = leader;
@@ -973,6 +974,8 @@ fastcall NORET_TYPE void do_exit(long code)
 
 	if (group_dead)
 		acct_process();
+	trace_mark(kernel_process_exit, "pid %d", tsk->pid);
+
 	exit_sem(tsk);
 	__exit_files(tsk);
 	__exit_fs(tsk);
@@ -1514,6 +1517,8 @@ static long do_wait(pid_t pid, int options, struct siginfo __user *infop,
 	struct task_struct *tsk;
 	int flag, retval;
 	int allowed, denied;
+
+	trace_mark(kernel_process_wait, "pid %d", pid);
 
 	add_wait_queue(&current->signal->wait_chldexit,&wait);
 repeat:
