@@ -64,17 +64,17 @@ int pms_global_standby(pms_standby_t state);
 #ifdef CONFIG_STM_LPC
 int pms_set_wakeup_timers(unsigned long long second);
 #else
-inline int pms_set_wakeup_timers(unsigned long long second)
+static inline int pms_set_wakeup_timers(unsigned long long second)
 {
 	return 0;
 }
 #endif
-inline int pms_disable_wakeup_timers(void)
+static inline int pms_disable_wakeup_timers(void)
 {
 	return pms_set_wakeup_timers(0);
 }
 
-inline int pms_change_wakeup_timers(unsigned long long second)
+static inline int pms_change_wakeup_timers(unsigned long long second)
 {
 	pms_set_wakeup_timers(0);
 	return pms_set_wakeup_timers(second);
