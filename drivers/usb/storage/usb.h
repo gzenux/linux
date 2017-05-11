@@ -152,6 +152,11 @@ struct us_data {
 	wait_queue_head_t	delay_wait;	 /* wait during scan, reset */
 	struct completion	scanning_done;	 /* wait for scan thread    */
 
+/* add by wgzhu smit */
+#if 1
+	struct completion       thread_done;    /* wait for thread exit */
+#endif
+
 	/* subdriver information */
 	void			*extra;		 /* Any extra data          */
 	extra_data_destructor	extra_destructor;/* extra data destructor   */

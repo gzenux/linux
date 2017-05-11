@@ -705,12 +705,6 @@ uspace_segv:
 	} else {
 		se_sys += 1;
 
-		if (se_kernmode_warn)
-			printk("Unaligned kernel access "
-			       "on behalf of \"%s\" pid=%d pc=0x%p ins=0x%04hx\n",
-			       current->comm,current->pid,(u16*)regs->pc,
-			       instruction);
-
 		if (regs->pc & 1)
 			die("unaligned program counter", regs, error_code);
 

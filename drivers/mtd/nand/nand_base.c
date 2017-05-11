@@ -2254,8 +2254,10 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	}
 
 	if (!type)
+	{
+		printk("nand_get_flash_type:***maf_id =0x%x****dev_id=0x%x\n",*maf_id ,dev_id);
 		return ERR_PTR(-ENODEV);
-
+	}
 	if (!mtd->name)
 		mtd->name = type->name;
 

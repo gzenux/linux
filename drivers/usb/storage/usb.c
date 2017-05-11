@@ -931,9 +931,18 @@ retry:
 		/* Should we unbind if no devices were detected? */
 	}
 
+/* add by wgzhu smit */
+#if 1
+	complete (&us->thread_done);
+#endif
 	complete_and_exit(&us->scanning_done, 0);
 }
 
+/* add by wgzhu smit */
+#if 1
+#include <linux/stm/soc.h>
+static int myflag = 0;
+#endif
 
 /* Probe to see if we can drive a newly-connected USB device */
 static int storage_probe(struct usb_interface *intf,
@@ -967,6 +976,11 @@ static int storage_probe(struct usb_interface *intf,
 	init_completion(&(us->notify));
 	init_waitqueue_head(&us->delay_wait);
 	init_completion(&us->scanning_done);
+
+/* add by wgzhu smit*/
+#if 1
+	init_completion(&us->thread_done);
+#endif
 
 	/* Associate the us_data structure with the USB device */
 	result = associate_dev(us, intf);
@@ -1017,6 +1031,16 @@ static int storage_probe(struct usb_interface *intf,
 	}
 
 	wake_up_process(th);
+
+/* add by wgzhu smit*/
+#if 1
+	if (!myflag) {
+		myflag = 1;
+		stx7105_configure_usb(1, NULL);
+	}
+
+	wait_for_completion(&us->thread_done);
+#endif
 
 	return 0;
 
