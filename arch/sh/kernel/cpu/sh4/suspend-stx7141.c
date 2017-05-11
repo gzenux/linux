@@ -193,7 +193,7 @@ static struct sh4_suspend_t st40data __cacheline_aligned = {
 static int __init suspend_platform_setup()
 {
 	struct sysconf_field *sc;
-#ifdef CONFIG_PM_DEBUG
+#if 0
 	/* route the sh4/2  clock frequenfy */
 	iowrite32(0xc, CLOCKGENA_BASE_ADDR + CKGA_CLKOBS_MUX1_CFG);
 	stpio_request_set_pin(3, 2, "clkA dbg", STPIO_ALT_OUT, 1);
