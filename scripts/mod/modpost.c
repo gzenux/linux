@@ -29,51 +29,14 @@ static int external_module = 0;
 static int vmlinux_section_warnings = 1;
 /* Only warn about unresolved symbols */
 static int warn_unresolved = 0;
+#ifdef CONFIG_LKM_ELF_HASH
+/* Create the ELF hash table for the vmlinux */
+static int vmlinux_hash;
+#endif
 /* How a symbol is exported */
 static int sec_mismatch_count = 0;
 static int sec_mismatch_verbose = 1;
 
-enum export {
-	export_plain,      export_unused,     export_gpl,
-	export_unused_gpl, export_gpl_future, export_unknown
-};
-
-#define PRINTF __attribute__ ((format (printf, 1, 2)))
-
-PRINTF void fatal(const char *fmt, ...)
-{
-	va_list arglist;
-
-	fprintf(stderr, "FATAL: ");
-
-	va_start(arglist, fmt);
-	vfprintf(stderr, fmt, arglist);
-	va_end(arglist);
-
-	exit(1);
-}
-
-PRINTF void warn(const char *fmt, ...)
-{
-	va_list arglist;
-
-	fprintf(stderr, "WARNING: ");
-
-	va_start(arglist, fmt);
-	vfprintf(stderr, fmt, arglist);
-	va_end(arglist);
-}
-
-PRINTF void merror(const char *fmt, ...)
-{
-	va_list arglist;
-
-	fprintf(stderr, "ERROR: ");
-
-	va_start(arglist, fmt);
-	vfprintf(stderr, fmt, arglist);
-	va_end(arglist);
-}
 
 static int is_vmlinux(const char *modname)
 {
@@ -86,7 +49,8 @@ static int is_vmlinux(const char *modname)
 		myname = modname;
 
 	return (strcmp(myname, "vmlinux") == 0) ||
-	       (strcmp(myname, "vmlinux.o") == 0);
+	       (strcmp(myname, "vmlinux.o") == 0) ||
+	       (strcmp(myname, ".tmp_vmlinux") == 0);
 }
 
 void *do_nofail(void *ptr, const char *expr)
@@ -133,25 +97,6 @@ static struct module *new_module(char *modname)
 
 	return mod;
 }
-
-/* A hash of all exported symbols,
- * struct symbol is also used for lists of unresolved symbols */
-
-#define SYMBOL_HASH_SIZE 1024
-
-struct symbol {
-	struct symbol *next;
-	struct module *module;
-	unsigned int crc;
-	int crc_valid;
-	unsigned int weak:1;
-	unsigned int vmlinux:1;    /* 1 if symbol is defined in vmlinux */
-	unsigned int kernel:1;     /* 1 if symbol is from kernel
-				    *  (only for external modules) **/
-	unsigned int preloaded:1;  /* 1 if symbol from Module.symvers */
-	enum export  export;       /* Type of export */
-	char name[0];
-};
 
 static struct symbol *symbolhash[SYMBOL_HASH_SIZE];
 
@@ -246,15 +191,15 @@ static enum export export_no(const char *s)
 
 static enum export export_from_sec(struct elf_info *elf, Elf_Section sec)
 {
-	if (sec == elf->export_sec)
+	if (sec == elf->ksym_tables[KSYMTAB].sec)
 		return export_plain;
-	else if (sec == elf->export_unused_sec)
+	else if (sec == elf->ksym_tables[KSYMTAB_UNUSED].sec)
 		return export_unused;
-	else if (sec == elf->export_gpl_sec)
+	else if (sec == elf->ksym_tables[KSYMTAB_GPL].sec)
 		return export_gpl;
-	else if (sec == elf->export_unused_gpl_sec)
+	else if (sec == elf->ksym_tables[KSYMTAB_UNUSED_GPL].sec)
 		return export_unused_gpl;
-	else if (sec == elf->export_gpl_future_sec)
+	else if (sec == elf->ksym_tables[KSYMTAB_GPL_FUTURE].sec)
 		return export_gpl_future;
 	else
 		return export_unknown;
@@ -300,25 +245,6 @@ static void sym_update_crc(const char *name, struct module *mod,
 	s->crc_valid = 1;
 }
 
-void *grab_file(const char *filename, unsigned long *size)
-{
-	struct stat st;
-	void *map;
-	int fd;
-
-	fd = open(filename, O_RDONLY);
-	if (fd < 0 || fstat(fd, &st) != 0)
-		return NULL;
-
-	*size = st.st_size;
-	map = mmap(NULL, *size, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
-	close(fd);
-
-	if (map == MAP_FAILED)
-		return NULL;
-	return map;
-}
-
 /**
   * Return a copy of the next line in a mmap'ed file.
   * spaces in the beginning of the line is trimmed away.
@@ -351,134 +277,6 @@ char *get_next_line(unsigned long *pos, void *file, unsigned long size)
 	}
 	/* End of buffer */
 	return NULL;
-}
-
-void release_file(void *file, unsigned long size)
-{
-	munmap(file, size);
-}
-
-static int parse_elf(struct elf_info *info, const char *filename)
-{
-	unsigned int i;
-	Elf_Ehdr *hdr;
-	Elf_Shdr *sechdrs;
-	Elf_Sym  *sym;
-
-	hdr = grab_file(filename, &info->size);
-	if (!hdr) {
-		perror(filename);
-		exit(1);
-	}
-	info->hdr = hdr;
-	if (info->size < sizeof(*hdr)) {
-		/* file too small, assume this is an empty .o file */
-		return 0;
-	}
-	/* Is this a valid ELF file? */
-	if ((hdr->e_ident[EI_MAG0] != ELFMAG0) ||
-	    (hdr->e_ident[EI_MAG1] != ELFMAG1) ||
-	    (hdr->e_ident[EI_MAG2] != ELFMAG2) ||
-	    (hdr->e_ident[EI_MAG3] != ELFMAG3)) {
-		/* Not an ELF file - silently ignore it */
-		return 0;
-	}
-	/* Fix endianness in ELF header */
-	hdr->e_type      = TO_NATIVE(hdr->e_type);
-	hdr->e_machine   = TO_NATIVE(hdr->e_machine);
-	hdr->e_version   = TO_NATIVE(hdr->e_version);
-	hdr->e_entry     = TO_NATIVE(hdr->e_entry);
-	hdr->e_phoff     = TO_NATIVE(hdr->e_phoff);
-	hdr->e_shoff     = TO_NATIVE(hdr->e_shoff);
-	hdr->e_flags     = TO_NATIVE(hdr->e_flags);
-	hdr->e_ehsize    = TO_NATIVE(hdr->e_ehsize);
-	hdr->e_phentsize = TO_NATIVE(hdr->e_phentsize);
-	hdr->e_phnum     = TO_NATIVE(hdr->e_phnum);
-	hdr->e_shentsize = TO_NATIVE(hdr->e_shentsize);
-	hdr->e_shnum     = TO_NATIVE(hdr->e_shnum);
-	hdr->e_shstrndx  = TO_NATIVE(hdr->e_shstrndx);
-	sechdrs = (void *)hdr + hdr->e_shoff;
-	info->sechdrs = sechdrs;
-
-	/* Check if file offset is correct */
-	if (hdr->e_shoff > info->size) {
-		fatal("section header offset=%lu in file '%s' is bigger than "
-		      "filesize=%lu\n", (unsigned long)hdr->e_shoff,
-		      filename, info->size);
-		return 0;
-	}
-
-	/* Fix endianness in section headers */
-	for (i = 0; i < hdr->e_shnum; i++) {
-		sechdrs[i].sh_name      = TO_NATIVE(sechdrs[i].sh_name);
-		sechdrs[i].sh_type      = TO_NATIVE(sechdrs[i].sh_type);
-		sechdrs[i].sh_flags     = TO_NATIVE(sechdrs[i].sh_flags);
-		sechdrs[i].sh_addr      = TO_NATIVE(sechdrs[i].sh_addr);
-		sechdrs[i].sh_offset    = TO_NATIVE(sechdrs[i].sh_offset);
-		sechdrs[i].sh_size      = TO_NATIVE(sechdrs[i].sh_size);
-		sechdrs[i].sh_link      = TO_NATIVE(sechdrs[i].sh_link);
-		sechdrs[i].sh_info      = TO_NATIVE(sechdrs[i].sh_info);
-		sechdrs[i].sh_addralign = TO_NATIVE(sechdrs[i].sh_addralign);
-		sechdrs[i].sh_entsize   = TO_NATIVE(sechdrs[i].sh_entsize);
-	}
-	/* Find symbol table. */
-	for (i = 1; i < hdr->e_shnum; i++) {
-		const char *secstrings
-			= (void *)hdr + sechdrs[hdr->e_shstrndx].sh_offset;
-		const char *secname;
-		int nobits = sechdrs[i].sh_type == SHT_NOBITS;
-
-		if (!nobits && sechdrs[i].sh_offset > info->size) {
-			fatal("%s is truncated. sechdrs[i].sh_offset=%lu > "
-			      "sizeof(*hrd)=%zu\n", filename,
-			      (unsigned long)sechdrs[i].sh_offset,
-			      sizeof(*hdr));
-			return 0;
-		}
-		secname = secstrings + sechdrs[i].sh_name;
-		if (strcmp(secname, ".modinfo") == 0) {
-			if (nobits)
-				fatal("%s has NOBITS .modinfo\n", filename);
-			info->modinfo = (void *)hdr + sechdrs[i].sh_offset;
-			info->modinfo_len = sechdrs[i].sh_size;
-		} else if (strcmp(secname, "__ksymtab") == 0)
-			info->export_sec = i;
-		else if (strcmp(secname, "__ksymtab_unused") == 0)
-			info->export_unused_sec = i;
-		else if (strcmp(secname, "__ksymtab_gpl") == 0)
-			info->export_gpl_sec = i;
-		else if (strcmp(secname, "__ksymtab_unused_gpl") == 0)
-			info->export_unused_gpl_sec = i;
-		else if (strcmp(secname, "__ksymtab_gpl_future") == 0)
-			info->export_gpl_future_sec = i;
-		else if (strcmp(secname, "__markers_strings") == 0)
-			info->markers_strings_sec = i;
-
-		if (sechdrs[i].sh_type != SHT_SYMTAB)
-			continue;
-
-		info->symtab_start = (void *)hdr + sechdrs[i].sh_offset;
-		info->symtab_stop  = (void *)hdr + sechdrs[i].sh_offset
-			                         + sechdrs[i].sh_size;
-		info->strtab       = (void *)hdr +
-			             sechdrs[sechdrs[i].sh_link].sh_offset;
-	}
-	if (!info->symtab_start)
-		fatal("%s has no symtab?\n", filename);
-
-	/* Fix endianness in symbols */
-	for (sym = info->symtab_start; sym < info->symtab_stop; sym++) {
-		sym->st_shndx = TO_NATIVE(sym->st_shndx);
-		sym->st_name  = TO_NATIVE(sym->st_name);
-		sym->st_value = TO_NATIVE(sym->st_value);
-		sym->st_size  = TO_NATIVE(sym->st_size);
-	}
-	return 1;
-}
-
-static void parse_elf_finish(struct elf_info *info)
-{
-	release_file(info->hdr, info->size);
 }
 
 static int ignore_undef_symbol(struct elf_info *info, const char *symname)
@@ -1571,13 +1369,19 @@ static void read_symbols(char *modname)
 	char *version;
 	char *license;
 	struct module *mod;
-	struct elf_info info = { };
+	struct elf_info *info;
 	Elf_Sym *sym;
 
-	if (!parse_elf(&info, modname))
+	info = (struct elf_info *) malloc(sizeof(struct elf_info));
+	if (!info)
+		return;
+	memset(info, 0, sizeof(*info));
+
+	if (!parse_elf(info, modname))
 		return;
 
 	mod = new_module(modname);
+	mod->info = info;
 
 	/* When there's no vmlinux, don't print warnings about
 	 * unresolved symbols (since there'll be too many ;) */
@@ -1586,8 +1390,8 @@ static void read_symbols(char *modname)
 		mod->skip = 1;
 	}
 
-	license = get_modinfo(info.modinfo, info.modinfo_len, "license");
-	if (info.modinfo && !license && !is_vmlinux(modname))
+	license = get_modinfo(info->modinfo, info->modinfo_len, "license");
+	if (info->modinfo && !license && !is_vmlinux(modname))
 		warn("modpost: missing MODULE_LICENSE() in %s\n"
 		     "see include/linux/module.h for "
 		     "more information\n", modname);
@@ -1598,31 +1402,33 @@ static void read_symbols(char *modname)
 			mod->gpl_compatible = 0;
 			break;
 		}
-		license = get_next_modinfo(info.modinfo, info.modinfo_len,
+		license = get_next_modinfo(info->modinfo, info->modinfo_len,
 					   "license", license);
 	}
 
-	for (sym = info.symtab_start; sym < info.symtab_stop; sym++) {
-		symname = info.strtab + sym->st_name;
+	for (sym = info->symtab_start; sym < info->symtab_stop; sym++) {
+		symname = info->strtab + sym->st_name;
 
-		handle_modversions(mod, &info, sym, symname);
-		handle_moddevtable(mod, &info, sym, symname);
+		handle_modversions(mod, info, sym, symname);
+		handle_moddevtable(mod, info, sym, symname);
 	}
 	if (!is_vmlinux(modname) ||
 	     (is_vmlinux(modname) && vmlinux_section_warnings))
-		check_sec_ref(mod, modname, &info);
+		check_sec_ref(mod, modname, info);
 
-	version = get_modinfo(info.modinfo, info.modinfo_len, "version");
+	version = get_modinfo(info->modinfo, info->modinfo_len, "version");
 	if (version)
-		maybe_frob_rcs_version(modname, version, info.modinfo,
-				       version - (char *)info.hdr);
+		maybe_frob_rcs_version(modname, version, info->modinfo,
+				       version - (char *)info->hdr);
 	if (version || (all_versions && !is_vmlinux(modname)))
 		get_src_version(modname, mod->srcversion,
 				sizeof(mod->srcversion)-1);
 
-	get_markers(&info, mod);
+	get_markers(info, mod);
 
-	parse_elf_finish(&info);
+#ifndef CONFIG_LKM_ELF_HASH
+	parse_elf_finish(info);
+#endif
 
 	/* Our trick to get versioning for module struct etc. - it's
 	 * never passed as an argument to an exported function, so
@@ -2084,7 +1890,12 @@ int main(int argc, char **argv)
 	struct ext_sym_list *extsym_iter;
 	struct ext_sym_list *extsym_start = NULL;
 
-	while ((opt = getopt(argc, argv, "i:I:e:cmsSo:awM:K:")) != -1) {
+#ifdef CONFIG_LKM_ELF_HASH
+#define OPTIONS	"i:I:e:cmsSo:awM:K:H"
+#else
+#define OPTIONS	"i:I:e:cmsSo:awM:K:"
+#endif
+	while ((opt = getopt(argc, argv, OPTIONS)) != -1) {
 		switch (opt) {
 		case 'i':
 			kernel_read = optarg;
@@ -2128,6 +1939,11 @@ int main(int argc, char **argv)
 			case 'K':
 				markers_read = optarg;
 				break;
+#ifdef CONFIG_LKM_ELF_HASH
+		case 'H':
+			vmlinux_hash = 1;
+			break;
+#endif
 		default:
 			exit(1);
 		}
@@ -2155,6 +1971,18 @@ int main(int argc, char **argv)
 
 	err = 0;
 
+#ifdef CONFIG_LKM_ELF_HASH
+	/* We have asked to create the ELF hash table for a vmlinux */
+	if (vmlinux_hash && is_vmlinux(modules->name)) {
+		char fname[strlen(modules->name) + 10];
+		buf.pos = 0;
+		add_ksymtable_hash(&buf, modules);
+		sprintf(fname, "%s.mod.c", modules->name);
+		write_if_changed(&buf, fname);
+		/* Nothing else to do with vmlinux */
+		return 0;
+	}
+#endif
 	for (mod = modules; mod; mod = mod->next) {
 		char fname[strlen(mod->name) + 10];
 
@@ -2169,7 +1997,12 @@ int main(int argc, char **argv)
 		add_depends(&buf, mod, modules);
 		add_moddevtable(&buf, mod);
 		add_srcversion(&buf, mod);
-
+#ifdef CONFIG_LKM_ELF_HASH
+		add_undef_hash(&buf, mod);
+		add_ksymtable_hash(&buf, mod);
+		/* Now we have done so release resources */
+		parse_elf_finish(mod->info);
+#endif
 		sprintf(fname, "%s.mod.c", mod->name);
 		write_if_changed(&buf, fname);
 	}

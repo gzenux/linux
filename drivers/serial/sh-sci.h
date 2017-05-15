@@ -98,6 +98,13 @@
 # define SCSPTR2 0xffe80020 /* 16 bit SCIF */
 # define SCIF_ORER 0x0001   /* overrun error bit */
 # define SCSCR_INIT(port) 0x38 /* TIE=0,RIE=0,TE=1,RE=1,REIE=1 */
+# define SCIF_ONLY
+#elif defined(CONFIG_CPU_SUBTYPE_ST40)
+# define SCSPTR1 0xffe00020 /* 16 bit SCIF */
+# define SCSPTR2 0xffe80020 /* 16 bit SCIF */
+# define SCIF_ORER 0x0001   /* overrun error bit */
+# define SCSCR_INIT(port)          0x38 /* TIE=0,RIE=0,TE=1,RE=1,REIE=1 */
+# define SCIF_ONLY
 #elif defined(CONFIG_CPU_SUBTYPE_SH5_101) || defined(CONFIG_CPU_SUBTYPE_SH5_103)
 # define SCIF_BASE_ADDR    0x01030000
 # define SCIF_ADDR_SH5     PHYS_PERIPHERAL_BLOCK+SCIF_BASE_ADDR
@@ -649,6 +656,14 @@ static inline int sci_rxd_in(struct uart_port *port)
 	if (port->type == PORT_SCIFA)
 		return ctrl_inw((port->mapbase + SCASSR)) & SCIF_BRK ? 1 : 0;
 	return 1;
+#elif defined(CONFIG_CPU_SUBTYPE_ST40)
+static inline int sci_rxd_in(struct uart_port *port)
+{
+	if (port->mapbase == 0xffe00000)
+		return ctrl_inw(SCSPTR1)&0x0001 ? 1 : 0; /* SCIF */
+	else
+		return ctrl_inw(SCSPTR2)&0x0001 ? 1 : 0; /* SCIF */
+
 }
 #elif defined(CONFIG_CPU_SUBTYPE_SH5_101) || defined(CONFIG_CPU_SUBTYPE_SH5_103)
 static inline int sci_rxd_in(struct uart_port *port)

@@ -115,10 +115,13 @@ config HAVE_KERNEL_BZIP2
 config HAVE_KERNEL_LZMA
 	bool
 
+config HAVE_KERNEL_LZO
+	bool
+
 choice
 	prompt "Kernel compression mode"
 	default KERNEL_GZIP
-	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_BZIP2 || HAVE_KERNEL_LZMA
+	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_BZIP2 || HAVE_KERNEL_LZMA || HAVE_KERNEL_LZO
 	help
 	  The linux kernel is a kind of self-extracting executable.
 	  Several compression algorithms are available, which differ
@@ -141,9 +144,8 @@ config KERNEL_GZIP
 	bool "Gzip"
 	depends on HAVE_KERNEL_GZIP
 	help
-	  The old and tried gzip compression. Its compression ratio is
-	  the poorest among the 3 choices; however its speed (both
-	  compression and decompression) is the fastest.
+	  The old and tried gzip compression. It provides a good balance
+	  between compression ratio and decompression speed.
 
 config KERNEL_BZIP2
 	bool "Bzip2"
@@ -163,6 +165,14 @@ config KERNEL_LZMA
 	  Its ratio is best, decompression speed is between the other
 	  two. Compression is slowest.	The kernel size is about 33%
 	  smaller with LZMA in comparison to gzip.
+
+config KERNEL_LZO
+	bool "LZO"
+	depends on HAVE_KERNEL_LZO
+	help
+	  Its compression ratio is the poorest among the 4. The kernel
+	  size is about about 10% bigger than gzip; however its speed
+	  (both compression and decompression) is the fastest.
 
 endchoice
 
@@ -1048,12 +1058,6 @@ config SLOB
 
 endchoice
 
-config PROFILING
-	bool "Profiling support (EXPERIMENTAL)"
-	help
-	  Say Y here to enable the extended profiling support mechanisms used
-	  by profilers such as OProfile.
-
 #
 # Place an empty function call at each tracepoint site. Can be
 # dynamically changed for a probe function.
@@ -1175,6 +1179,43 @@ config MODULE_SRCVERSION_ALL
 	  others sometimes change the module source without updating
 	  the version).  With this option, such a "srcversion" field
 	  will be created for all modules.  If unsure, say N.
+
+config LKM_ELF_HASH
+    bool "Enable ELF hash support for fast loading"
+    default y
+    help
+      Extend the modules and vmlinux ELF file by adding a new section
+      to implement the ELF hash table to be used for symbol lookup.
+      When inserting a module, the symbol lookup process will use the
+      ELF hash table for finding symbols. It also relies upon the support
+      provided by the ksymhash tool to avoiding further computation at
+      runtime of the hash values (of both exported and undefined symbols).
+      If you enable this feature, all other external modules must be
+      rebuilt accordingly.
+
+config MODULES_BPA2
+	bool "Allocate memory for modules from BPA2"
+	depends on BPA2 && SUPERH
+	help
+	  Setting this option allows to allocate memory for
+	  modules from BPA2 rather than vmalloc().
+
+config MODULES_BPA2_PART_NAME
+	string "Name of BPA2 partition to allocate buffers from"
+	depends on MODULES_BPA2
+	default "modules"
+	help
+	   Define a name of BPA2 partition used for allocating module memory.
+	   As worst case, if name is not given in command line, allocation
+	   will be done through vmalloc().
+
+config MODULES_BPA2_FALLBACK
+	bool "Fallback to vmalloc if BPA2 allocation fails"
+	depends on MODULES_BPA2
+	default y
+	help
+	   Memory for the module will normally be allocated from the BPA2
+	   partition. However if this flag is set then a second attempt will
 
 endif # MODULES
 

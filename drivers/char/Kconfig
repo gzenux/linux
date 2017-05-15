@@ -705,6 +705,8 @@ config IBM_BSR
 	  of threads across a large system which avoids bouncing a cacheline
 	  between several cores on a system
 
+source "drivers/char/lirc/Kconfig"
+
 source "drivers/char/ipmi/Kconfig"
 
 config DS1620
@@ -1117,6 +1119,12 @@ config DEVPORT
 	default y
 
 source "drivers/s390/char/Kconfig"
+
+#KPROBE-SH
+config KPROBE_EXAMPLE
+        tristate "kprobe example"
+	depends on KPROBES
+#KPROBE-SH
 
 endmenu
 

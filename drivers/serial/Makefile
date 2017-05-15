@@ -81,3 +81,5 @@ obj-$(CONFIG_SERIAL_KS8695) += serial_ks8695.o
 obj-$(CONFIG_KGDB_SERIAL_CONSOLE) += kgdboc.o
 obj-$(CONFIG_SERIAL_QE) += ucc_uart.o
 obj-$(CONFIG_SERIAL_TIMBERDALE)	+= timbuart.o
+obj-$(CONFIG_SERIAL_STM_ASC) += stm-asc.o
+obj-$(CONFIG_SERIAL_STM_ASC_FDMA) += stm-asc-fdma.o

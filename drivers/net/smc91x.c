@@ -1000,6 +1000,59 @@ static void smc_phy_powerdown(struct net_device *dev)
 }
 
 /*
+ * smc_phy_powerup - powerup phy
+ * @dev: net device
+ *
+ * Restore the device in normal power mode.
+ */
+static void smc_phy_powerup(struct net_device *dev)
+{
+	struct smc_local *lp = netdev_priv(dev);
+	unsigned int bmcr;
+	int phy = lp->mii.phy_id;
+	void __iomem *ioaddr = lp->base;
+
+	if (lp->phy_type == 0)
+		return;
+
+	bmcr = smc_phy_read(dev, phy, MII_BMCR);
+	DBG(2, "smc_phy_powerup: PHY Ctrl Reg: 0x%x\n", bmcr);
+
+	/* Write the PDN bit in PHY MI register 0 */
+	bmcr &= ~BMCR_PDOWN;
+	smc_phy_write(dev, phy, MII_BMCR, bmcr);
+
+	/* PHY should be in isolation mode */
+	while (!(bmcr = smc_phy_read(dev, phy, MII_BMCR) & BMCR_ISOLATE)){}
+
+	/* Clear MII_DIS bit.*/
+	bmcr &= ~BMCR_ISOLATE;
+	smc_phy_write(dev, phy, MII_BMCR, bmcr);
+
+	/* Wait 500ms for the PHY in order to restore normal operation mode */
+	msleep(500);
+
+	/* Reconfigure the device caps */
+	SMC_SELECT_BANK(lp, 0);
+	SMC_SET_RPC(lp, lp->rpc_cur_mode);
+
+	if (lp->mii.force_media) {
+		smc_phy_fixed(dev);
+		goto smc_phy_powerup_exit;
+	}
+
+	smc_phy_read(dev, phy, MII_ADVERTISE);
+
+	bmcr |= (BMCR_ANENABLE | BMCR_ANRESTART);
+	smc_phy_write(dev, phy, MII_BMCR, bmcr);
+
+smc_phy_powerup_exit:
+	SMC_SELECT_BANK(lp, 2);
+	lp->work_pending = 0;
+	return;
+}
+
+/*
  * smc_phy_check_media - check the media status and adjust TCR
  * @dev: net device
  * @init: set true for initialisation
@@ -2061,13 +2114,12 @@ static int __devinit smc_probe(struct net_device *dev, void __iomem *ioaddr,
 			lp->cfg.flags & SMC91X_NOWAIT ? " [nowait]" : "",
 			THROTTLE_TX_PKTS ? " [throttle_tx]" : "");
 
+		/* Print the Ethernet address */
+		printk("%s: Ethernet addr: %pM\n",
+		       dev->name, dev->dev_addr);
 		if (!is_valid_ether_addr(dev->dev_addr)) {
 			printk("%s: Invalid ethernet MAC address.  Please "
 			       "set using ifconfig\n", dev->name);
-		} else {
-			/* Print the Ethernet address */
-			printk("%s: Ethernet addr: %pM\n",
-			       dev->name, dev->dev_addr);
 		}
 
 		if (lp->phy_type == 0) {
@@ -2388,9 +2440,9 @@ static int smc_drv_resume(struct platform_device *dev)
 		smc_enable_device(dev);
 		if (netif_running(ndev)) {
 			smc_reset(ndev);
-			smc_enable(ndev);
 			if (lp->phy_type != 0)
-				smc_phy_configure(&lp->phy_configure);
+				smc_phy_powerup(ndev);
+			smc_enable(ndev);
 			netif_device_attach(ndev);
 		}
 	}

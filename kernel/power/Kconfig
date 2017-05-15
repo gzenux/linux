@@ -82,7 +82,7 @@ config PM_SLEEP_SMP
 
 config PM_SLEEP
 	bool
-	depends on SUSPEND || HIBERNATION || XEN_SAVE_RESTORE
+	depends on SUSPEND || HIBERNATION || XEN_SAVE_RESTORE || HIBERNATION_ON_MEMORY
 	default y
 
 config SUSPEND
@@ -182,6 +182,33 @@ config PM_STD_PARTITION
 	  Note there is currently not a way to specify which device to save the
 	  suspended image to. It will simply pick the first available swap 
 	  device.
+
+config HIBERNATION_ON_MEMORY
+	bool "Hibernation on memory"
+	depends on PM
+	select HIBERNATION
+	---help---
+	  Enable the hibernation on memory (HoM) functionality. This techniques
+	  will put the memory in self-refresh and after that it will turn-off
+	  the chip.
+
+config HOM_TAG_VIRTUAL_ADDRESS
+	hex "Hibernation on memory - Tag virtual addess"
+	depends on HIBERNATION_ON_MEMORY
+	depends on SUPERH32
+	default "0x80001800"
+	---help---
+	  Set the Absolute Virtual Address where the Hibernation
+
+config HOM_DEBUG
+	bool "Hibernation on memory - Debug"
+	depends on HIBERNATION_ON_MEMORY
+	depends on SUPERH32
+	default n
+	---help---
+	  This option enables the hom_printk function. This works
+	  like a standard printk on the empty_zero_page.
+	  It's used as a rudimental printk to debug.
 
 config APM_EMULATION
 	tristate "Advanced Power Management Emulation"

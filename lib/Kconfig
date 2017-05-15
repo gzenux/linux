@@ -117,6 +117,12 @@ config DECOMPRESS_BZIP2
 config DECOMPRESS_LZMA
 	tristate
 
+config LIBELF_32
+	bool
+
+config LIBELF_64
+	bool
+
 #
 # Generic allocator support is selected if needed
 #
@@ -128,7 +134,7 @@ config GENERIC_ALLOCATOR
 #
 config REED_SOLOMON
 	tristate
-	
+
 config REED_SOLOMON_ENC8
 	boolean
 

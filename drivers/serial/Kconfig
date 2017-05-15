@@ -1477,4 +1477,26 @@ config SERIAL_BCM63XX_CONSOLE
 	  If you have enabled the serial port on the bcm63xx CPU
 	  you can make it the console by answering Y to this option.
 
+config SERIAL_STM_ASC
+	tristate "ST ASC serial port support"
+	depends on CPU_SUBTYPE_ST40
+	default y
+	select SERIAL_CORE
+	help
+	  This driver is for the on-chip Asychronous Serial Controller on
+	  some STMicroelectronics system-on-chip devices.
+
+config SERIAL_STM_ASC_CONSOLE
+	bool "Support for console on ST ASC"
+	depends on SERIAL_STM_ASC=y
+	default y
+	select SERIAL_CORE_CONSOLE
+
+config SERIAL_STM_ASC_FDMA
+	bool "Support FDMA on ST ASC"
+	depends on SERIAL_STM_ASC && STM_DMA
+	help
+	  This enables on-chip FDMA to be used with the Asychronous Serial
+	  Controller on some STMicroelectronics system-on-chip devices.
+
 endmenu

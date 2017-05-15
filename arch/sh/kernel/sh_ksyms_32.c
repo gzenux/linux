@@ -37,6 +37,17 @@ EXPORT_SYMBOL(memcpy);
 EXPORT_SYMBOL(memset);
 EXPORT_SYMBOL(memmove);
 EXPORT_SYMBOL(__copy_user);
+
+#ifdef CONFIG_FLATMEM
+#include <linux/bootmem.h>
+EXPORT_SYMBOL(min_low_pfn);	/* defined by bootmem.c, but not exported by generic code */
+EXPORT_SYMBOL(max_low_pfn);	/* defined by bootmem.c, but not exported by generic code */
+#endif
+
+#ifdef CONFIG_MMU
+EXPORT_SYMBOL(get_vm_area);
+#endif
+
 EXPORT_SYMBOL(__udelay);
 EXPORT_SYMBOL(__ndelay);
 EXPORT_SYMBOL(__const_udelay);
@@ -113,6 +124,7 @@ DECLARE_EXPORT(__udivsi3_i4i);
 /* needed by some modules */
 EXPORT_SYMBOL(flush_cache_all);
 EXPORT_SYMBOL(flush_cache_range);
+EXPORT_SYMBOL(flush_cache_page);
 EXPORT_SYMBOL(flush_dcache_page);
 #endif
 

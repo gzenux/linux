@@ -9,7 +9,8 @@ ifdef CONFIG_FUNCTION_TRACER
 CFLAGS_REMOVE_ftrace.o = -pg
 endif
 
-obj-y	:= debugtraps.o dumpstack.o idle.o io.o io_generic.o irq.o	\
+obj-y	:= debugtraps.o dumpstack.o					\
+	   idle.o io.o io_generic.o irq.o				\
 	   machvec.o nmi_debug.o process_$(BITS).o ptrace_$(BITS).o	\
 	   setup.o signal_$(BITS).o sys_sh.o sys_sh$(BITS).o		\
 	   syscalls_$(BITS).o time.o topology.o traps.o			\
@@ -28,7 +29,8 @@ obj-$(CONFIG_CRASH_DUMP)	+= crash_dump.o
 obj-$(CONFIG_STACKTRACE)	+= stacktrace.o
 obj-$(CONFIG_IO_TRAPPED)	+= io_trapped.o
 obj-$(CONFIG_KPROBES)		+= kprobes.o
-obj-$(CONFIG_GENERIC_GPIO)	+= gpio.o
+obj-$(CONFIG_KPTRACE)		+= kptrace.o
+obj-$(CONFIG_PINMUX_GPIO)	+= gpio.o
 obj-$(CONFIG_DYNAMIC_FTRACE)	+= ftrace.o
 obj-$(CONFIG_FTRACE_SYSCALLS)	+= ftrace.o
 obj-$(CONFIG_FUNCTION_GRAPH_TRACER) += ftrace.o

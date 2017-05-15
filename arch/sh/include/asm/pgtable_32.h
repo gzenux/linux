@@ -87,6 +87,8 @@
 #define _PAGE_PCC_ATR8	0x60000000	/* Attribute Memory space, 8 bit bus */
 #define _PAGE_PCC_ATR16	0x60000001	/* Attribute Memory space, 6 bit bus */
 
+#ifndef __ASSEMBLY__
+
 #ifndef CONFIG_X2TLB
 /* copy the ptea attributes */
 static inline unsigned long copy_ptea_attributes(unsigned long x)
@@ -94,6 +96,8 @@ static inline unsigned long copy_ptea_attributes(unsigned long x)
 	return	((x >> 28) & 0xe) | (x & 0x1);
 }
 #endif
+
+#endif /* !__ASSEMBLY__ */
 
 /* Mask which drops unused bits from the PTEL value */
 #if defined(CONFIG_CPU_SH3)
@@ -385,8 +389,7 @@ PTE_BIT_FUNC(low, mkspecial, |= _PAGE_SPECIAL);
 #define pgprot_noncached	 pgprot_writecombine
 
 /*
- * Conversion functions: convert a page and protection to a page entry,
- * and a page entry and page directory to the page they refer to.
+ * Conversion functions: convert a page and protection to a page entry.
  *
  * extern pte_t mk_pte(struct page *page, pgprot_t pgprot)
  */

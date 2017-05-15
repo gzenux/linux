@@ -96,7 +96,8 @@ void copy_user_highpage(struct page *to, struct page *from,
 		kunmap_atomic(vfrom, KM_USER0);
 	}
 
-	if (pages_do_alias((unsigned long)vto, vaddr & PAGE_MASK))
+	if (pages_do_alias((unsigned long)vto, vaddr & PAGE_MASK) ||
+	    (vma->vm_flags & VM_EXEC))
 		__flush_purge_region(vto, PAGE_SIZE);
 
 	kunmap_atomic(vto, KM_USER1);
@@ -135,6 +136,8 @@ void __update_cache(struct vm_area_struct *vma,
 
 			if (pages_do_alias(addr, address & PAGE_MASK))
 				__flush_purge_region((void *)addr, PAGE_SIZE);
+			else if (vma->vm_flags & VM_EXEC)
+				__flush_wback_region((void *)addr, PAGE_SIZE);
 		}
 	}
 }

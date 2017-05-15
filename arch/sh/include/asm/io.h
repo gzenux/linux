@@ -173,6 +173,10 @@ __BUILD_MEMORY_STRING(q, u64)
 #define iowrite32_rep(a, s, c)	__raw_writesl((a), (s), (c))
 #endif
 
+/*
+ * Use __raw_readsl and __raw_writesl rather than the generic versions from
+ * iomap.c because we have optimised versions for the SH.
+ */  
 #define mmio_insb(p,d,c)	__raw_readsb(p,d,c)
 #define mmio_insw(p,d,c)	__raw_readsw(p,d,c)
 #define mmio_insl(p,d,c)	__raw_readsl(p,d,c)
@@ -246,7 +250,7 @@ void __iounmap(void __iomem *addr);
 static inline void __iomem *
 __ioremap_mode(unsigned long offset, unsigned long size, unsigned long flags)
 {
-#if defined(CONFIG_SUPERH32) && !defined(CONFIG_PMB_FIXED)
+#ifdef CONFIG_29BIT
 	unsigned long last_addr = offset + size - 1;
 #endif
 	void __iomem *ret;
@@ -255,7 +259,7 @@ __ioremap_mode(unsigned long offset, unsigned long size, unsigned long flags)
 	if (ret)
 		return ret;
 
-#if defined(CONFIG_SUPERH32) && !defined(CONFIG_PMB_FIXED)
+#ifdef CONFIG_29BIT
 	/*
 	 * For P1 and P2 space this is trivial, as everything is already
 	 * mapped. Uncached access for P1 addresses are done through P2.
