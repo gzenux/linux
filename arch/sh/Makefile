@@ -155,6 +155,7 @@ machdir-$(CONFIG_SH_CAYMAN)			+= mach-cayman
 machdir-$(CONFIG_SH_RSK)			+= mach-rsk
 
 # ST Boards
+machdir-$(CONFIG_SH_ST_PDK7105)			+= mach-pdk7105
 machdir-$(CONFIG_SH_ST_ADI7108)			+= mach-adi7108
 machdir-$(CONFIG_SH_ST_B2000)			+= mach-b2000
 machdir-$(CONFIG_SH_ST_B2039)			+= mach-b2039
