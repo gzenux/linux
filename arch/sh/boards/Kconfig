@@ -602,6 +602,15 @@ config SH_ST_IPTV7105
 	help
 	  Select SH_ST_IPTV7105 if configuring for an STx7105 IPTV board
 
+config SH_ST_PDK7105
+	bool "PDK7105-SDK : STi7105 SDK Reference board"
+	depends on CPU_SUBTYPE_STX7105
+	select SYS_SUPPORTS_PCI
+	select SH_ST_SYNOPSYS_PCI if PCI
+	help
+	  Select PDK7105-SDK if configuring for an
+	  STMicroelectronics STi7105 SDK Reference Board.
+
 config SH_ST_NGB7167
 	bool "NGB7167 : STi7167-NGB Reference board"
 	depends on CPU_SUBTYPE_STX7105
