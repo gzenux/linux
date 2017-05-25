@@ -281,6 +281,17 @@ asmlinkage void __init sh_cpu_init(void)
 	if (current_cpu_data.type == CPU_SH_NONE)
 		panic("Unknown CPU");
 
+#if defined CONFIG_32BIT && defined CONFIG_PMB
+	pmb_init();
+#else
+	/*
+	 * Handle trivial transitions between cached and uncached
+	 * segments, making use of the 1:1 mapping relationship in
+	 * 512MB lowmem.
+	 */
+	cached_to_uncached = P2SEG - P1SEG;
+#endif
+
 	/* First setup the rest of the I-cache info */
 	current_cpu_data.icache.entry_mask = current_cpu_data.icache.way_incr -
 				      current_cpu_data.icache.linesz;
@@ -311,12 +322,12 @@ asmlinkage void __init sh_cpu_init(void)
 	if (fpu_disabled) {
 		printk("FPU Disabled\n");
 		current_cpu_data.flags &= ~CPU_HAS_FPU;
-		disable_fpu();
 	}
 
 	/* FPU initialization */
+	disable_fpu();
 	if ((current_cpu_data.flags & CPU_HAS_FPU)) {
-		clear_thread_flag(TIF_USEDFPU);
+		current_thread_info()->status &= ~TS_USEDFPU;
 		clear_used_math();
 	}
 
@@ -325,6 +336,8 @@ asmlinkage void __init sh_cpu_init(void)
 	 * TLB flushing routines depend on this being setup.
 	 */
 	current_cpu_data.asid_cache = NO_CONTEXT;
+
+	current_cpu_data.phys_bits = __in_29bit_mode() ? 29 : 32;
 
 #ifdef CONFIG_SH_DSP
 	/* Probe for DSP */

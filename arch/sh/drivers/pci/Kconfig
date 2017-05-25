@@ -17,3 +17,8 @@ config SH_PCIDMA_NONCOHERENT
 	  code will not have to flush the CPU's caches. If you have a PCI host
 	  bridge integrated with your SH CPU, refer carefully to the chip specs
 	  to see if you can say 'N' here. Otherwise, leave it as 'Y'.
+
+# Old style PCI controller, used on ST40RA, GX1 etc
+config SH_ST_ST40RA_PCI
+	bool
+	default n

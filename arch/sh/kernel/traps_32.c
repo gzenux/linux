@@ -257,7 +257,10 @@ static struct mem_access user_mem_access = {
  * desired behaviour
  * - note that PC _may not_ point to the faulting instruction
  *   (if that instruction is in a branch delay slot)
- * - return 0 if emulation okay, -EFAULT on existential error
+ * - return:
+ *   0 if emulation okay (PC unchanged)
+ *   1 if emulation OK (PC already updated)
+ *   -EFAULT on existential error
  */
 static int handle_unaligned_ins(insn_size_t instruction, struct pt_regs *regs,
 				struct mem_access *ma)
@@ -462,14 +465,6 @@ int handle_unaligned_access(insn_size_t instruction, struct pt_regs *regs,
 	index = (instruction>>8)&15;	/* 0x0F00 */
 	rm = regs->regs[index];
 
-	/* shout about fixups */
-	if (!expected && printk_ratelimit())
-		printk(KERN_NOTICE "Fixing up unaligned %s access "
-		       "in \"%s\" pid=%d pc=0x%p ins=0x%04hx\n",
-		       user_mode(regs) ? "userspace" : "kernel",
-		       current->comm, task_pid_nr(current),
-		       (void *)regs->pc, instruction);
-
 	ret = -EFAULT;
 	switch (instruction&0xF000) {
 	case 0x0000:
@@ -634,6 +629,9 @@ asmlinkage void do_address_error(struct pt_regs *regs,
 		}
 		set_fs(oldfs);
 
+		if (test_thread_flag (TIF_UAC_SIGBUS))
+			goto uspace_segv;
+
 		/* shout about userspace fixups */
 		if (se_usermode & 1)
 			printk(KERN_NOTICE "Unaligned userspace access "
@@ -664,7 +662,7 @@ fixup:
 					      &user_mem_access, 0);
 		set_fs(oldfs);
 
-		if (tmp==0)
+		if (tmp>=0)
 			return; /* sorted */
 uspace_segv:
 		printk(KERN_NOTICE "Sending SIGBUS to \"%s\" due to unaligned "
@@ -972,6 +970,53 @@ void __init trap_init(void)
 	/* Setup VBR for boot cpu */
 	per_cpu_trap_init();
 }
+
+void get_stack(char *buf, unsigned long *sp, size_t size, size_t depth)
+{
+	unsigned long addr;
+#ifdef CONFIG_KALLSYMS
+	char *modname;
+	const char *name;
+	unsigned long offset, symbolsize;
+	char namebuf[KSYM_NAME_LEN + 1];
+#endif
+	int i = 0;
+	int pos = 0;
+
+	while (!kstack_end(sp) && i < depth) {
+		addr = *sp++;
+		if (kernel_text_address(addr)){
+			pos += snprintf(buf + pos, size - pos, "[<%08lx>] ",
+					addr);
+
+#ifdef CONFIG_KALLSYMS
+			name = kallsyms_lookup(addr, &symbolsize, &offset,
+					       &modname, namebuf);
+			if (!name) {
+				pos += snprintf(buf + pos, size - pos,
+					        "0x%lx", addr);
+			} else {
+				if (modname) {
+					pos += snprintf(buf + pos,
+					                size - pos,
+					                "%s+%#lx/%#lx [%s]\n",
+					                name, offset,
+					                symbolsize, modname);
+				} else {
+					pos += snprintf(buf + pos,
+					                size - pos,
+					                "%s+%#lx/%#lx\n", name,
+					                offset, symbolsize);
+				}
+			}
+#else
+			pos += snprintf(buf + pos, size - pos, "\n");
+#endif
+			i++;
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(get_stack);
 
 void show_stack(struct task_struct *tsk, unsigned long *sp)
 {

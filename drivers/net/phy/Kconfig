@@ -65,7 +65,7 @@ config BCM63XX_PHY
 config ICPLUS_PHY
 	tristate "Drivers for ICPlus PHYs"
 	---help---
-	  Currently supports the IP175C PHY.
+	  Currently supports the IP175C and IP1001 PHYs.
 
 config REALTEK_PHY
 	tristate "Drivers for Realtek PHYs"
@@ -87,6 +87,11 @@ config LSI_ET1011C_PHY
 	tristate "Driver for LSI ET1011C PHY"
 	---help---
 	  Supports the LSI ET1011C PHY.
+
+config MICREL_PHY
+	tristate "Driver for Micrel PHYs"
+	---help---
+	  Supports the KSZ9021, VSC8201, KS8001 PHYs.
 
 config FIXED_PHY
 	bool "Driver for MDIO Bus/PHY emulation with fixed speed/link PHYs"

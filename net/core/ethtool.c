@@ -357,6 +357,32 @@ static int ethtool_set_wol(struct net_device *dev, char __user *useraddr)
 	return dev->ethtool_ops->set_wol(dev, &wol);
 }
 
+static int ethtool_get_eee(struct net_device *dev, char __user *useraddr)
+{
+	struct ethtool_value edata;
+
+	if (!dev->ethtool_ops->get_eee)
+		return -EOPNOTSUPP;
+
+	dev->ethtool_ops->get_eee(dev, &edata);
+
+	if (copy_to_user(useraddr, &edata, sizeof(edata)))
+		return -EFAULT;
+	return 0;
+}
+
+static int ethtool_set_eee(struct net_device *dev, char __user *useraddr)
+{
+	struct ethtool_value edata;
+
+	if (!dev->ethtool_ops->set_eee)
+		return -EOPNOTSUPP;
+
+	if (copy_from_user(&edata, useraddr, sizeof(edata)))
+		return -EFAULT;
+
+	return dev->ethtool_ops->set_eee(dev, &edata);
+}
 static int ethtool_nway_reset(struct net_device *dev)
 {
 	if (!dev->ethtool_ops->nway_reset)
@@ -642,7 +668,9 @@ static int ethtool_set_ufo(struct net_device *dev, char __user *useraddr)
 		return -EFAULT;
 	if (edata.data && !(dev->features & NETIF_F_SG))
 		return -EINVAL;
-	if (edata.data && !(dev->features & NETIF_F_HW_CSUM))
+	if (edata.data && !((dev->features & NETIF_F_GEN_CSUM) ||
+		(dev->features & (NETIF_F_IP_CSUM|NETIF_F_IPV6_CSUM))
+			== (NETIF_F_IP_CSUM|NETIF_F_IPV6_CSUM)))
 		return -EINVAL;
 	return dev->ethtool_ops->set_ufo(dev, edata.data);
 }
@@ -1011,6 +1039,12 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_SMSGLVL:
 		rc = ethtool_set_value_void(dev, useraddr,
 				       dev->ethtool_ops->set_msglevel);
+		break;
+	case ETHTOOL_GEEE:
+		rc = ethtool_get_eee(dev, useraddr);
+		break;
+	case ETHTOOL_SEEE:
+		rc = ethtool_set_eee(dev, useraddr);
 		break;
 	case ETHTOOL_NWAY_RST:
 		rc = ethtool_nway_reset(dev);

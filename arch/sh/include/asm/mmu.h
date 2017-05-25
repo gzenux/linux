@@ -7,6 +7,8 @@
 #define PMB_PASCR		0xff000070
 #define PMB_IRMCR		0xff000078
 
+#define PASCR_SE		0x80000000
+
 #define PMB_ADDR		0xf6100000
 #define PMB_DATA		0xf7100000
 #define PMB_ENTRY_MAX		16
@@ -22,6 +24,8 @@
 #define PMB_WT			0x00000001
 #define PMB_UB			0x00000200
 #define PMB_V			0x00000100
+#define PMB_VPN		0xff000000
+#define PMB_PPN		0xff000000
 
 #define PMB_NO_ENTRY		(-1)
 
@@ -43,36 +47,24 @@ typedef struct {
 #endif
 } mm_context_t;
 
-struct pmb_entry;
-
-struct pmb_entry {
-	unsigned long vpn;
-	unsigned long ppn;
-	unsigned long flags;
-
-	/*
-	 * 0 .. NR_PMB_ENTRIES for specific entry selection, or
-	 * PMB_NO_ENTRY to search for a free one
-	 */
-	int entry;
-
-	struct pmb_entry *next;
-	/* Adjacent entry link for contiguous multi-entry mappings */
-	struct pmb_entry *link;
-};
-
+#ifdef CONFIG_PMB
 /* arch/sh/mm/pmb.c */
-int __set_pmb_entry(unsigned long vpn, unsigned long ppn,
-		    unsigned long flags, int *entry);
-int set_pmb_entry(struct pmb_entry *pmbe);
-void clear_pmb_entry(struct pmb_entry *pmbe);
-struct pmb_entry *pmb_alloc(unsigned long vpn, unsigned long ppn,
-			    unsigned long flags);
-void pmb_free(struct pmb_entry *pmbe);
-long pmb_remap(unsigned long virt, unsigned long phys,
-	       unsigned long size, unsigned long flags);
-void pmb_unmap(unsigned long addr);
+bool __in_29bit_mode(void);
+
+long pmb_remap(unsigned long phys, unsigned long size, unsigned long flags);
+int pmb_unmap(unsigned long addr);
+void pmb_init(void);
+int pmb_virt_to_phys(void *addr, unsigned long *phys, unsigned long *flags);
+
+#else
+
+#ifdef CONFIG_29BIT
+#define __in_29bit_mode()	(1)
+#else
+#define __in_29bit_mode()	(0)
+#endif
+
+#endif /* CONFIG_PMB */
 #endif /* __ASSEMBLY__ */
 
 #endif /* __MMU_H */
-

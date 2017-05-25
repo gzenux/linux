@@ -2,6 +2,8 @@
 # Makefile for the Linux SuperH-specific parts of the memory manager.
 #
 
+GCOV_PROFILE_pmb.o := n
+
 obj-y			:= cache.o init.o consistent.o mmap.o
 
 cacheops-$(CONFIG_CPU_SH2)		:= cache-sh2.o
@@ -36,6 +38,7 @@ obj-$(CONFIG_HUGETLB_PAGE)	+= hugetlbpage.o
 obj-$(CONFIG_PMB)		+= pmb.o
 obj-$(CONFIG_PMB_FIXED)		+= pmb-fixed.o
 obj-$(CONFIG_NUMA)		+= numa.o
+obj-$(CONFIG_STM_L2_CACHE)	+= stm-l2-cache.o stm-l2-helper.o
 
 # Special flags for fault_64.o.  This puts restrictions on the number of
 # caller-save registers that the compiler can target when building this file.

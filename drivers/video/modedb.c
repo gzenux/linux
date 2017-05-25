@@ -643,15 +643,19 @@ done:
 	diff = -1;
 	best = -1;
 	for (i = 0; i < dbsize; i++) {
-		if ((name_matches(db[i], name, namelen) ||
-		    (res_specified && res_matches(db[i], xres, yres))) &&
-		    !fb_try_mode(var, info, &db[i], bpp)) {
-			if (refresh_specified && db[i].refresh == refresh) {
-				return 1;
-			} else {
-				if (abs(db[i].refresh - refresh) < diff) {
-					diff = abs(db[i].refresh - refresh);
-					best = i;
+		int mode_interlace = (db[i].vmode & FB_VMODE_INTERLACED)?1:0;
+
+		if (name_matches(db[i], name, namelen) ||
+		    (res_specified && res_matches(db[i], xres, yres))) {
+			if(!fb_try_mode(var, info, &db[i], bpp)) {
+				if((!refresh_specified || db[i].refresh == refresh) &&
+				   (interlace == mode_interlace)) {
+					return 1;
+				} else {
+					if(diff > abs(db[i].refresh - refresh)) {
+						diff = abs(db[i].refresh - refresh);
+						best = i;
+					}
 				}
 			}
 		}

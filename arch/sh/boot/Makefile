@@ -8,6 +8,10 @@
 # Copyright (C) 1999 Stuart Menefy
 #
 
+# Set these to dummy values if not defined to avoid error messages.
+CONFIG_MEMORY_START     ?= 0
+CONFIG_ZERO_PAGE_OFFSET ?= 0
+
 MKIMAGE := $(srctree)/scripts/mkuboot.sh
 
 #
@@ -24,9 +28,10 @@ suffix-y := bin
 suffix-$(CONFIG_KERNEL_GZIP)  := gz
 suffix-$(CONFIG_KERNEL_BZIP2) := bz2
 suffix-$(CONFIG_KERNEL_LZMA)  := lzma
+suffix-$(CONFIG_KERNEL_LZO)   := lzo
 
 targets := zImage vmlinux.srec romImage uImage uImage.srec uImage.gz uImage.bz2 uImage.lzma uImage.bin
-extra-y += vmlinux.bin vmlinux.bin.gz vmlinux.bin.bz2 vmlinux.bin.lzma
+extra-y += vmlinux.bin vmlinux.bin.gz vmlinux.bin.bz2 vmlinux.bin.lzma vmlinux.bin.lzo
 subdir- := compressed romimage
 
 $(obj)/zImage: $(obj)/compressed/vmlinux FORCE
@@ -79,6 +84,9 @@ $(obj)/vmlinux.bin.bz2: $(obj)/vmlinux.bin FORCE
 
 $(obj)/vmlinux.bin.lzma: $(obj)/vmlinux.bin FORCE
 	$(call if_changed,lzma)
+
+$(obj)/vmlinux.bin.lzo: $(obj)/vmlinux.bin FORCE
+	$(call if_changed,lzo)
 
 $(obj)/uImage.bz2: $(obj)/vmlinux.bin.bz2
 	$(call if_changed,uimage,bzip2)

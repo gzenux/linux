@@ -127,6 +127,7 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		has_fsl_port_bug:1; /* FreeScale */
 	unsigned		big_endian_mmio:1;
 	unsigned		big_endian_desc:1;
+	unsigned		has_reset_port_bug:1; /* STMicroelectronics */
 	unsigned		has_amcc_usb23:1;
 	unsigned		need_io_watchdog:1;
 	unsigned		broken_periodic:1;
@@ -585,6 +586,13 @@ ehci_port_speed(struct ehci_hcd *ehci, unsigned int portsc)
 #define	ehci_has_fsl_portno_bug(e)		(0)
 #endif
 
+#ifdef CONFIG_USB_STM_COMMON_MODULE
+/* Some STMicrocelectronics controller doesn't deassert the reset bit
+ */
+#define ehci_has_reset_portno_bug(e)		((e)->has_reset_port_bug)
+#else
+#define ehci_has_reset_portno_bug(e)		(0)
+#endif
 /*
  * While most USB host controllers implement their registers in
  * little-endian format, a minority (celleb companion chip) implement

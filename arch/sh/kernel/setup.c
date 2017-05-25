@@ -40,6 +40,7 @@
 #include <asm/setup.h>
 #include <asm/clock.h>
 #include <asm/mmu_context.h>
+#include <asm/sparsemem.h>
 
 /*
  * Initialize loops_per_jiffy as 10000000 (1000MIPS).
@@ -50,7 +51,9 @@ struct sh_cpuinfo cpu_data[NR_CPUS] __read_mostly = {
 	[0] = {
 		.type			= CPU_SH_NONE,
 		.family			= CPU_FAMILY_UNKNOWN,
+		.variant		= CPU_VARIANT_UNKNOWN,
 		.loops_per_jiffy	= 10000000,
+		.phys_bits		= MAX_PHYSMEM_BITS,
 	},
 };
 EXPORT_SYMBOL(cpu_data);
@@ -187,6 +190,7 @@ static inline void __init reserve_crashkernel(void)
 {}
 #endif
 
+#ifndef CONFIG_GENERIC_CALIBRATE_DELAY
 void __cpuinit calibrate_delay(void)
 {
 	struct clk *clk = clk_get(NULL, "cpu_clk");
@@ -202,6 +206,7 @@ void __cpuinit calibrate_delay(void)
 			 (loops_per_jiffy/(5000/HZ)) % 100,
 			 loops_per_jiffy);
 }
+#endif
 
 void __init __add_active_range(unsigned int nid, unsigned long start_pfn,
 						unsigned long end_pfn)
@@ -447,11 +452,11 @@ void __init setup_arch(char **cmdline_p)
 	conswitchp = &dummy_con;
 #endif
 
+	paging_init();
+
 	/* Perform the machine specific initialisation */
 	if (likely(sh_mv.mv_setup))
 		sh_mv.mv_setup(cmdline_p);
-
-	paging_init();
 
 #ifdef CONFIG_SMP
 	plat_smp_setup();
@@ -483,6 +488,18 @@ static const char *cpu_name[] = {
 	[CPU_SH7750R]	= "SH7750R",	[CPU_SH7751]	= "SH7751",
 	[CPU_SH7751R]	= "SH7751R",	[CPU_SH7760]	= "SH7760",
 	[CPU_SH4_202]	= "SH4-202",	[CPU_SH4_501]	= "SH4-501",
+	[CPU_FLI7510]	= "Freeman-510", [CPU_FLI7520]	= "Freeman-520",
+	[CPU_FLI7530]	= "Freeman-530", [CPU_FLI7540]	= "Freeman-540",
+	[CPU_FLI7560]	= "Freeman-560",
+	[CPU_ST40RA]	= "ST40RA",	[CPU_ST40GX1]	= "ST40GX1",
+	[CPU_STX5197]	= "STx5197",	[CPU_STX5206]	= "STx5206",
+	[CPU_STI5528]	= "STi5528",	[CPU_STM8000]	= "STm8000",
+	[CPU_STXH205]	= "STxH205",
+	[CPU_STX7100]	= "STx7100",	[CPU_STX7105]	= "STx7105",
+	[CPU_STX7106]	= "STx7106",	[CPU_STX7108]	= "STx7108",
+	[CPU_STX7109]	= "STx7109",
+	[CPU_STX7111]	= "STx7111",	[CPU_STX7141]	= "STx7141",
+	[CPU_STX7200]	= "STx7200",
 	[CPU_SH7763]	= "SH7763",	[CPU_SH7770]	= "SH7770",
 	[CPU_SH7780]	= "SH7780",	[CPU_SH7781]	= "SH7781",
 	[CPU_SH7343]	= "SH7343",	[CPU_SH7785]	= "SH7785",
@@ -500,11 +517,24 @@ const char *get_cpu_subtype(struct sh_cpuinfo *c)
 }
 EXPORT_SYMBOL(get_cpu_subtype);
 
+static const char *cpu_variant[] = {
+	[CPU_VARIANT_SH4_102] = "sh4-102",
+	[CPU_VARIANT_SH4_103] = "sh4-103",
+	[CPU_VARIANT_SH4_202] = "sh4-202",
+	[CPU_VARIANT_ST40_300] = "st40-300",
+	[CPU_VARIANT_UNKNOWN] = "Unknown",
+};
+
+const char *get_cpu_variant(struct sh_cpuinfo *c)
+{
+	return cpu_variant[c->variant];
+}
+
 #ifdef CONFIG_PROC_FS
 /* Symbolic CPU flags, keep in sync with asm/cpu-features.h */
 static const char *cpu_flags[] = {
 	"none", "fpu", "p2flush", "mmuassoc", "dsp", "perfctr",
-	"ptea", "llsc", "l2", "op32", "pteaex", NULL
+	"ptea", "llsc", "l2", "op32", "pteaex", "icbi", "synco", "fpchg", NULL
 };
 
 static void show_cpuflags(struct seq_file *m, struct sh_cpuinfo *c)
@@ -554,6 +584,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 
 	seq_printf(m, "processor\t: %d\n", cpu);
 	seq_printf(m, "cpu family\t: %s\n", init_utsname()->machine);
+	seq_printf(m, "cpu variant\t: %s\n", get_cpu_variant(c));
 	seq_printf(m, "cpu type\t: %s\n", get_cpu_subtype(c));
 	if (c->cut_major == -1)
 		seq_printf(m, "cut\t\t: unknown\n");
@@ -583,6 +614,8 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	/* Optional secondary cache */
 	if (c->flags & CPU_HAS_L2_CACHE)
 		show_cacheinfo(m, "scache", c->scache);
+
+	seq_printf(m, "address sizes\t: %u bits physical\n", c->phys_bits);
 
 	seq_printf(m, "bogomips\t: %lu.%02lu\n",
 		     c->loops_per_jiffy/(500000/HZ),

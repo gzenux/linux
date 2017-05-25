@@ -1514,6 +1514,8 @@ and is between 256 and 4096 characters. It is defined in the file
 
 	n2=		[NET] SDL Inc. RISCom/N2 synchronous serial card
 
+	nbootpart=	[MTD,STM_NAND_FLEX] Specify boot-mode-ECC partition
+
 	NCR_D700=	[HW,SCSI]
 			See header of drivers/scsi/NCR_D700.c.
 
@@ -2493,6 +2495,11 @@ and is between 256 and 4096 characters. It is defined in the file
 			server. Increasing these values may allow you to
 			improve throughput, but will also increase the
 			amount of memory reserved for use by the client.
+
+	suppress_bind=	[KNL]
+			Prevent the automatic binding of a device driver
+			to the specified devices.
+			Format: device,device,...
 
 	swiotlb=	[IA-64] Number of I/O TLB slabs
 

@@ -25,6 +25,7 @@
 #define CCN_PVR		0xff000030
 #define CCN_CVR		0xff000040
 #define CCN_PRR		0xff000044
+#define CCN_RAMCR	0xff000074	/* ST40-300 */
 
 asmlinkage void __init sh_cpu_init(void);
 
@@ -56,6 +57,7 @@ asmlinkage void __init sh_cpu_init(void);
 #define SR_DSP		0x00001000
 #define SR_IMASK	0x000000f0
 #define SR_FD		0x00008000
+#define SR_MD		0x40000000
 
 /*
  * DSP structure and data
@@ -136,7 +138,7 @@ struct mm_struct;
 extern void release_thread(struct task_struct *);
 
 /* Prepare to copy thread state - unlazy all lazy status */
-#define prepare_to_copy(tsk)	do { } while (0)
+void prepare_to_copy(struct task_struct *tsk);
 
 /*
  * create a kernel thread without removing it from tasklists
@@ -210,10 +212,13 @@ extern unsigned long get_wchan(struct task_struct *p);
 #define ARCH_HAS_PREFETCHW
 static inline void prefetch(void *x)
 {
-	__asm__ __volatile__ ("pref @%0\n\t" : : "r" (x) : "memory");
+	__builtin_prefetch(x, 0, 3);
 }
 
-#define prefetchw(x)	prefetch(x)
+static inline void prefetchw(void *x)
+{
+	__builtin_prefetch(x, 1, 3);
+}
 #endif
 
 #endif /* __KERNEL__ */

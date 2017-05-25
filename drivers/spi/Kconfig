@@ -228,6 +228,15 @@ config SPI_STMP3XXX
 	help
 	  SPI driver for Freescale STMP37xx/378x SoC SSP interface
 
+config SPI_STM
+	tristate "STMicroelectronics SPI SSC-based driver"
+	depends on CPU_SUBTYPE_ST40
+	select SPI_BITBANG
+	help
+	  STMicroelectronics SoCs support for SPI.
+	  If you say yes to this option, support will be included for the
+	  SSC driven SPI.
+
 config SPI_TXX9
 	tristate "Toshiba TXx9 SPI controller"
 	depends on GENERIC_GPIO && CPU_TX49XX

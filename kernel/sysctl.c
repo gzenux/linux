@@ -124,6 +124,9 @@ static int ngroups_max = NGROUPS_MAX;
 extern char modprobe_path[];
 extern int modules_disabled;
 #endif
+#ifdef CONFIG_FB_CON_DECOR 
+extern char fbcon_decor_path[];
+#endif
 #ifdef CONFIG_CHR_DEV_SG
 extern int sg_big_buff;
 #endif
@@ -588,6 +591,17 @@ static struct ctl_table kern_table[] = {
 		.procname	= "hotplug",
 		.data		= &uevent_helper,
 		.maxlen		= UEVENT_HELPER_PATH_LEN,
+		.mode		= 0644,
+		.proc_handler	= &proc_dostring,
+		.strategy	= &sysctl_string,
+	},
+#endif
+#ifdef CONFIG_FB_CON_DECOR
+	{
+		.ctl_name	= KERN_FBCON_DECOR,
+		.procname	= "fbcondecor",
+		.data		= &fbcon_decor_path,
+		.maxlen		= KMOD_PATH_LEN,
 		.mode		= 0644,
 		.proc_handler	= &proc_dostring,
 		.strategy	= &sysctl_string,

@@ -156,9 +156,15 @@ static inline void switch_mm(struct mm_struct *prev,
 static inline void enable_mmu(void)
 {
 	unsigned int cpu = smp_processor_id();
+	unsigned long mmucr_init = MMU_CONTROL_INIT;
 
 	/* Enable MMU */
-	ctrl_outl(MMU_CONTROL_INIT, MMUCR);
+#ifdef CONFIG_32BIT
+	if (1) /* SH4-202 and SE */
+		mmucr_init |= MMUCR_SE;
+#endif
+
+	ctrl_outl(mmucr_init, MMUCR);
 	ctrl_barrier();
 
 	if (asid_cache(cpu) == NO_CONTEXT)

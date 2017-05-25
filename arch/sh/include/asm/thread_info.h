@@ -19,6 +19,7 @@ struct thread_info {
 	struct task_struct	*task;		/* main task structure */
 	struct exec_domain	*exec_domain;	/* execution domain */
 	unsigned long		flags;		/* low level flags */
+	__u32			status;		/* thread synchronous flags */
 	__u32			cpu;
 	int			preempt_count; /* 0 => preemptable, <0 => BUG */
 	mm_segment_t		addr_limit;	/* thread address space */
@@ -50,6 +51,7 @@ struct thread_info {
 	.task		= &tsk,			\
 	.exec_domain	= &default_exec_domain,	\
 	.flags		= 0,			\
+	.status		= 0,			\
 	.cpu		= 0,			\
 	.preempt_count	= INIT_PREEMPT_COUNT,	\
 	.addr_limit	= KERNEL_DS,		\
@@ -121,6 +123,9 @@ extern void free_thread_info(struct thread_info *ti);
 #define TIF_POLLING_NRFLAG	17	/* true if poll_idle() is polling TIF_NEED_RESCHED */
 #define TIF_MEMDIE		18
 #define TIF_FREEZE		19	/* Freezing for suspend */
+#define TIF_UAC_NOPRINT		20	/* PR_UNALIGN_NOPRINT (1) */
+#define TIF_UAC_SIGBUS		21	/* PR_UNALIGN_SIGBUS (2) */
+
 
 #define _TIF_SYSCALL_TRACE	(1 << TIF_SYSCALL_TRACE)
 #define _TIF_SIGPENDING		(1 << TIF_SIGPENDING)
@@ -134,6 +139,8 @@ extern void free_thread_info(struct thread_info *ti);
 #define _TIF_USEDFPU		(1 << TIF_USEDFPU)
 #define _TIF_POLLING_NRFLAG	(1 << TIF_POLLING_NRFLAG)
 #define _TIF_FREEZE		(1 << TIF_FREEZE)
+#define _TIF_UAC_NOPRINT	(1 << TIF_UAC_NOPRINT)
+#define _TIF_UAC_SIGBUS		(1 << TIF_UAC_SIGBUS)
 
 /*
  * _TIF_ALLWORK_MASK and _TIF_WORK_MASK need to fit within 2 bytes, or we
@@ -155,6 +162,34 @@ extern void free_thread_info(struct thread_info *ti);
 /* work to do on interrupt/exception return */
 #define _TIF_WORK_MASK		(_TIF_ALLWORK_MASK & ~(_TIF_SYSCALL_TRACE | \
 				 _TIF_SYSCALL_AUDIT | _TIF_SINGLESTEP))
+
+/* PR_[GS]ET_UNALIGN prctls */
+#define SH_UAC_SHIFT		TIF_UAC_NOPRINT
+#define SH_UAC_MASK		(_TIF_UAC_SIGBUS | _TIF_UAC_NOPRINT)
+
+#define SET_UNALIGN_CTL(task,value)	\
+({	\
+	task_thread_info(task)->flags =	\
+	((task_thread_info(task)->flags & ~SH_UAC_MASK)	\
+				| (((value) << SH_UAC_SHIFT) & SH_UAC_MASK));\
+	0;	\
+})
+
+#define GET_UNALIGN_CTL(task,addr)	\
+({	\
+	put_user((task_thread_info(task)->flags & SH_UAC_MASK) \
+	>> SH_UAC_SHIFT,	\
+	(int __user *) (addr));	\
+})
+
+/*
+ * Thread-synchronous status.
+ *
+ * This is different from the flags in that nobody else
+ * ever touches our thread-synchronous status, so we don't
+ * have to worry about atomic accesses.
+ */
+#define TS_USEDFPU		0x0001	/* FPU used by this task this quantum */
 
 #endif /* __KERNEL__ */
 

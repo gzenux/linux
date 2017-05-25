@@ -17,6 +17,7 @@
 #include <linux/fs.h>
 #include <asm/mmu_context.h>
 #include <asm/cacheflush.h>
+#include <linux/module.h>
 
 /*
  * The maximum number of pages we support up to when doing ranged dcache
@@ -26,16 +27,12 @@
 #define MAX_DCACHE_PAGES	64	/* XXX: Tune for ways */
 #define MAX_ICACHE_PAGES	32
 
-static void __flush_cache_one(unsigned long addr, unsigned long phys,
-			       unsigned long exec_offset);
+static void (*__flush_dcache_segment_fn)(unsigned long, unsigned long);
 
-/*
- * This is initialised here to ensure that it is not placed in the BSS.  If
- * that were to happen, note that cache_init gets called before the BSS is
- * cleared, so this would get nulled out which would be hopeless.
- */
-static void (*__flush_dcache_segment_fn)(unsigned long, unsigned long) =
-	(void (*)(unsigned long, unsigned long))0xdeadbeef;
+static void __flush_cache_one(unsigned long addr,
+		unsigned long phys, int way_count, unsigned long way_incr);
+static void (*__flush_cache_one_uncached)(unsigned long addr,
+		unsigned long phys, int way_count, unsigned long way_incr);
 
 /*
  * Write back the range of D-cache, and purge the I-cache.
@@ -92,24 +89,43 @@ static void __uses_jump_to_uncached sh4_flush_icache_range(void *args)
 	local_irq_restore(flags);
 }
 
-static inline void flush_cache_one(unsigned long start, unsigned long phys)
+static inline void flush_cache_one(unsigned long start, unsigned long kaddr)
 {
-	unsigned long flags, exec_offset = 0;
+	unsigned long flags;
+	struct cache_info *cache;
+	int way_count;
+	unsigned long way_incr;
+	void (*fco)(unsigned long addr, unsigned long kaddr, int way_count,
+			unsigned long way_incr);
 
 	/*
-	 * All types of SH-4 require PC to be in P2 to operate on the I-cache.
-	 * Some types of SH-4 require PC to be in P2 to operate on the D-cache.
+	 * All types of SH-4 require PC to uncached to operate on the I-cache.
+	 * Some types of SH-4 require PC to be uncached to operate on the
+	 * D-cache.
 	 */
-	if ((boot_cpu_data.flags & CPU_HAS_P2_FLUSH_BUG) ||
-	    (start < CACHE_OC_ADDRESS_ARRAY))
-		exec_offset = 0x20000000;
+
+	if (unlikely(start < CACHE_OC_ADDRESS_ARRAY)){
+		cache = &boot_cpu_data.icache;
+		fco = __flush_cache_one_uncached;
+	} else {
+		cache = &boot_cpu_data.dcache;
+		fco = __flush_cache_one;
+	}
+
+	if (unlikely(boot_cpu_data.flags & CPU_HAS_P2_FLUSH_BUG))
+		fco = __flush_cache_one_uncached;
+
+	way_count = cache->ways;
+	way_incr = cache->way_incr;
 
 	local_irq_save(flags);
-	__flush_cache_one(start | SH_CACHE_ASSOC, P1SEGADDR(phys), exec_offset);
+	fco(start | SH_CACHE_ASSOC, kaddr, way_count, way_incr);
 	local_irq_restore(flags);
 }
 
 /*
+ * Called just before the kernel reads a page cache page, or has written
+ * to a page cache page, which may have been mapped into user space.
  * Write back & invalidate the D-cache of the page.
  * (To avoid "alias" issues)
  */
@@ -120,22 +136,31 @@ static void sh4_flush_dcache_page(void *arg)
 	struct address_space *mapping = page_mapping(page);
 
 	if (mapping && !mapping_mapped(mapping))
+		/* There are no user mappings for this page, so we can
+		 * defer the flush. */
 		set_bit(PG_dcache_dirty, &page->flags);
 	else
 #endif
-	{
-		unsigned long phys = PHYSADDR(page_address(page));
-		unsigned long addr = CACHE_OC_ADDRESS_ARRAY;
-		int i, n;
-
-		/* Loop all the D-cache */
-		n = boot_cpu_data.dcache.n_aliases;
-		for (i = 0; i < n; i++, addr += PAGE_SIZE)
-			flush_cache_one(addr, phys);
-	}
+		/* page->mapping is NULL for argv/env pages, which
+		 * must be flushed here (there is no call to
+		 * update_mmu_cache in this case). Or there is a user
+		 * mapping for this page, so we flush. */
+		flush_kernel_dcache_page(page);
 
 	wmb();
 }
+
+void flush_kernel_dcache_page_addr(unsigned long kaddr)
+{
+	unsigned long addr = CACHE_OC_ADDRESS_ARRAY;
+	int i, n;
+
+	/* Loop all the D-cache */
+	n = boot_cpu_data.dcache.n_aliases;
+	for (i = 0; i < n; i++, addr += PAGE_SIZE)
+		flush_cache_one(addr, kaddr);
+}
+EXPORT_SYMBOL(flush_kernel_dcache_page_addr);
 
 /* TODO: Selective icache invalidation through IC address array.. */
 static void __uses_jump_to_uncached flush_icache_all(void)
@@ -303,13 +328,13 @@ static void sh4_flush_cache_page(void *args)
 {
 	struct flusher_data *data = args;
 	struct vm_area_struct *vma;
-	unsigned long address, pfn, phys;
+	unsigned long address, pfn, kaddr;
 	unsigned int alias_mask;
 
 	vma = data->vma;
 	address = data->addr1;
 	pfn = data->addr2;
-	phys = pfn << PAGE_SHIFT;
+	kaddr = (unsigned long)pfn_to_kaddr(pfn);
 
 	if (cpu_context(smp_processor_id(), vma->vm_mm) == NO_CONTEXT)
 		return;
@@ -317,15 +342,15 @@ static void sh4_flush_cache_page(void *args)
 	alias_mask = boot_cpu_data.dcache.alias_mask;
 
 	/* We only need to flush D-cache when we have alias */
-	if ((address^phys) & alias_mask) {
+	if ((address^kaddr) & alias_mask) {
 		/* Loop 4K of the D-cache */
 		flush_cache_one(
 			CACHE_OC_ADDRESS_ARRAY | (address & alias_mask),
-			phys);
+			kaddr);
 		/* Loop another 4K of the D-cache */
 		flush_cache_one(
-			CACHE_OC_ADDRESS_ARRAY | (phys & alias_mask),
-			phys);
+			CACHE_OC_ADDRESS_ARRAY | (kaddr & alias_mask),
+			kaddr);
 	}
 
 	alias_mask = boot_cpu_data.icache.alias_mask;
@@ -340,7 +365,7 @@ static void sh4_flush_cache_page(void *args)
 		 */
 		flush_cache_one(
 			CACHE_IC_ADDRESS_ARRAY | (address & alias_mask),
-			phys);
+			kaddr);
 	}
 }
 
@@ -397,47 +422,19 @@ static void sh4_flush_cache_range(void *args)
  * __flush_cache_one
  *
  * @addr:  address in memory mapped cache array
- * @phys:  P1 address to flush (has to match tags if addr has 'A' bit
+ * @phys:  address to flush (has to match tags if addr has 'A' bit
  *         set i.e. associative write)
- * @exec_offset: set to 0x20000000 if flush has to be executed from P2
- *               region else 0x0
  *
  * The offset into the cache array implied by 'addr' selects the
  * 'colour' of the virtual address range that will be flushed.  The
  * operation (purge/write-back) is selected by the lower 2 bits of
  * 'phys'.
  */
-static void __flush_cache_one(unsigned long addr, unsigned long phys,
-			       unsigned long exec_offset)
+static void __uses_jump_to_uncached __flush_cache_one(unsigned long addr,
+		unsigned long phys, int way_count, unsigned long way_incr)
 {
-	int way_count;
 	unsigned long base_addr = addr;
-	struct cache_info *dcache;
-	unsigned long way_incr;
 	unsigned long a, ea, p;
-	unsigned long temp_pc;
-
-	dcache = &boot_cpu_data.dcache;
-	/* Write this way for better assembly. */
-	way_count = dcache->ways;
-	way_incr = dcache->way_incr;
-
-	/*
-	 * Apply exec_offset (i.e. branch to P2 if required.).
-	 *
-	 * FIXME:
-	 *
-	 *	If I write "=r" for the (temp_pc), it puts this in r6 hence
-	 *	trashing exec_offset before it's been added on - why?  Hence
-	 *	"=&r" as a 'workaround'
-	 */
-	asm volatile("mov.l 1f, %0\n\t"
-		     "add   %1, %0\n\t"
-		     "jmp   @%0\n\t"
-		     "nop\n\t"
-		     ".balign 4\n\t"
-		     "1:  .long 2f\n\t"
-		     "2:\n" : "=&r" (temp_pc) : "r" (exec_offset));
 
 	/*
 	 * We know there will be >=1 iteration, so write as do-while to avoid
@@ -735,6 +732,13 @@ void __init sh4_cache_init(void)
 			break;
 		}
 	}
+
+	/*
+	 * Pre-calculate the address of the uncached version of
+	 * __flush_cache_4096 so we can call it directly.
+	 */
+	__flush_cache_one_uncached =
+		&__flush_cache_one + cached_to_uncached;
 
 	local_flush_icache_range	= sh4_flush_icache_range;
 	local_flush_dcache_page		= sh4_flush_dcache_page;

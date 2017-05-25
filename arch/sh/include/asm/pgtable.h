@@ -26,8 +26,6 @@
 extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 #define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 
-#endif /* !__ASSEMBLY__ */
-
 /*
  * Effective and physical address definitions, to aid with sign
  * extension.
@@ -41,6 +39,8 @@ static inline unsigned long long neff_sign_extend(unsigned long val)
 	unsigned long long extended = val;
 	return (extended & NEFF_SIGN) ? (extended | NEFF_MASK) : extended;
 }
+
+#endif /* !__ASSEMBLY__ */
 
 #ifdef CONFIG_29BIT
 #define NPHYS		29
@@ -85,7 +85,9 @@ static inline unsigned long long neff_sign_extend(unsigned long val)
 #define PTE_FLAGS_MASK		(~(PTE_PHYS_MASK) << PAGE_SHIFT)
 
 #ifdef CONFIG_SUPERH32
-#define VMALLOC_START	(P3SEG)
+#define CONSISTENT_BASE	(P3SEG)
+#define CONSISTENT_END	(P3SEG+0x01000000)
+#define VMALLOC_START	CONSISTENT_END
 #else
 #define VMALLOC_START	(0xf0000000)
 #endif
@@ -125,6 +127,8 @@ static inline unsigned long long neff_sign_extend(unsigned long val)
 #define __S110	PAGE_RWX
 #define __S111	PAGE_RWX
 
+#ifndef __ASSEMBLY__
+
 typedef pte_t *pte_addr_t;
 
 #define kern_addr_valid(addr)	(1)
@@ -161,6 +165,8 @@ extern void page_table_range_init(unsigned long start, unsigned long end,
 /* arch/sh/mm/mmap.c */
 #define HAVE_ARCH_UNMAPPED_AREA
 #define HAVE_ARCH_UNMAPPED_AREA_TOPDOWN
+
+#endif /* __ASSEMBLY__ */
 
 #include <asm-generic/pgtable.h>
 
