@@ -1630,6 +1630,8 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 
 	n2=		[NET] SDL Inc. RISCom/N2 synchronous serial card
 
+	nbootpart=	[MTD,STM_NAND_FLEX] Specify boot-mode-ECC partition
+
 	netdev=		[NET] Network devices parameters
 			Format: <irq>,<io>,<mem_start>,<mem_end>,<name>
 			Note that mem_start is often overloaded to mean

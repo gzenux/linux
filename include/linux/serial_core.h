@@ -213,6 +213,9 @@
 /* Energy Micro efm32 SoC */
 #define PORT_EFMUART   100
 
+/* ST ASC type numbers */
+#define PORT_ASC       101
+
 #ifdef __KERNEL__
 
 #include <linux/compiler.h>
