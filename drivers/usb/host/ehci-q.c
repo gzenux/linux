@@ -628,12 +628,25 @@ qh_urb_transaction (
 	list_add_tail (&qtd->qtd_list, head);
 	qtd->urb = urb;
 
+	is_input = usb_pipein (urb->pipe);
+
 	token = QTD_STS_ACTIVE;
+#ifdef CONFIG_CPU_SUBTYPE_STX7100
+	/* The problem is that packets where the checksum has large numbers of 1's
+	 * the bitstuffing is still not correct. SMSC hubs seem to be very tight on the
+	 * specification, and fail. The workaround is to set the retry to infinite,
+	 * eventually the packet will go through, although it can rarely take up to a dozen
+	 * attempts. We only do this for output pipes, we leave input pipes with the
+	 * default TUNE_CERR value.
+	 */
+	if(is_input) token |= (EHCI_TUNE_CERR << 10);
+#else
 	token |= (EHCI_TUNE_CERR << 10);
+#endif
+
 	/* for split transactions, SplitXState initialized to zero */
 
 	len = urb->transfer_buffer_length;
-	is_input = usb_pipein (urb->pipe);
 	if (usb_pipecontrol (urb->pipe)) {
 		/* SETUP pid */
 		qtd_fill(ehci, qtd, urb->setup_dma,
@@ -1004,6 +1017,12 @@ static void qh_link_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 	head->qh_next.qh = qh;
 	head->hw->hw_next = dma;
 
+	/*
+	 * flush qh descriptor into memory immediately,
+	 * see comments in qh_append_tds.
+	 */
+	ehci_sync_mem();
+
 	qh_get(qh);
 	qh->xacterrs = 0;
 	qh->qh_state = QH_STATE_LINKED;
@@ -1090,6 +1109,18 @@ static struct ehci_qh *qh_append_tds (
 			/* let the hc process these next qtds */
 			wmb ();
 			dummy->hw_token = token;
+
+			/*
+			 * Writing to dma coherent buffer on ARM may
+			 * be delayed to reach memory, so HC may not see
+			 * hw_token of dummy qtd in time, which can cause
+			 * the qtd transaction to be executed very late,
+			 * and degrade performance a lot. ehci_sync_mem
+			 * is added to flush 'token' immediatelly into
+			 * memory, so that ehci can execute the transaction
+			 * ASAP.
+			 */
+			ehci_sync_mem();
 
 			urb->hcpriv = qh_get (qh);
 		}

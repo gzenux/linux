@@ -332,6 +332,14 @@ static int ehci_reset (struct ehci_hcd *ehci)
 	retval = handshake (ehci, &ehci->regs->command,
 			    CMD_RESET, 0, 250 * 1000);
 
+	/*
+	 * Some host controller doesn't deassert the reset bit
+	 */
+	if (retval == -ETIMEDOUT && ehci_has_reset_portno_bug(ehci)) {
+		ehci_writel(ehci, command & ~CMD_RESET, &ehci->regs->command);
+		retval = 0;
+	}
+
 	if (ehci->has_hostpc) {
 		ehci_writel(ehci, USBMODE_EX_HC | USBMODE_EX_VBPS,
 			(u32 __iomem *)(((u8 *)ehci->regs) + USBMODE_EX));
@@ -503,7 +511,7 @@ static void ehci_shutdown(struct usb_hcd *hcd)
 	spin_unlock_irq(&ehci->lock);
 }
 
-static void ehci_port_power (struct ehci_hcd *ehci, int is_on)
+static inline void ehci_port_power(struct ehci_hcd *ehci, int is_on)
 {
 	unsigned port;
 
@@ -1276,6 +1284,11 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_MIPS_ALCHEMY
 #include "ehci-au1xxx.c"
 #define	PLATFORM_DRIVER		ehci_hcd_au1xxx_driver
+#endif
+
+#if defined(CONFIG_USB_STM_COMMON) || defined(CONFIG_USB_STM_COMMON_MODULE)
+#include "ehci-stcore.c"
+#define	PLATFORM_DRIVER		ehci_hcd_stm_driver
 #endif
 
 #ifdef CONFIG_USB_EHCI_HCD_OMAP

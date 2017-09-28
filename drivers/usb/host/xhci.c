@@ -331,9 +331,14 @@ static void xhci_msix_sync_irqs(struct xhci_hcd *xhci)
 static int xhci_try_enable_msi(struct usb_hcd *hcd)
 {
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
-	struct pci_dev  *pdev = to_pci_dev(xhci_to_hcd(xhci)->self.controller);
+	struct pci_dev  *pdev;
 	int ret;
 
+	/* The xhci platform device has set up IRQs through usb_add_hcd. */
+	if (xhci->quirks & XHCI_PLAT)
+		return 0;
+
+	pdev = to_pci_dev(xhci_to_hcd(xhci)->self.controller);
 	/*
 	 * Some Fresco Logic host controllers advertise MSI, but fail to
 	 * generate interrupts.  Don't even try to enable MSI.
@@ -3970,7 +3975,6 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 	struct xhci_hcd		*xhci;
 	struct device		*dev = hcd->self.controller;
 	int			retval;
-	u32			temp;
 
 	/* Accept arbitrarily long scatter-gather lists */
 	hcd->self.sg_tablesize = ~0;
@@ -3996,14 +4000,6 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 		/* xHCI private pointer was set in xhci_pci_probe for the second
 		 * registered roothub.
 		 */
-		xhci = hcd_to_xhci(hcd);
-		temp = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
-		if (HCC_64BIT_ADDR(temp)) {
-			xhci_dbg(xhci, "Enabling 64-bit DMA addresses.\n");
-			dma_set_mask(hcd->self.controller, DMA_BIT_MASK(64));
-		} else {
-			dma_set_mask(hcd->self.controller, DMA_BIT_MASK(32));
-		}
 		return 0;
 	}
 
@@ -4035,12 +4031,12 @@ int xhci_gen_setup(struct usb_hcd *hcd, xhci_get_quirks_t get_quirks)
 		goto error;
 	xhci_dbg(xhci, "Reset complete\n");
 
-	temp = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
-	if (HCC_64BIT_ADDR(temp)) {
+	/* Set dma_mask and coherent_dma_mask to 64-bits,
+	 * if xHC supports 64-bit addressing */
+	if (HCC_64BIT_ADDR(xhci->hcc_params) &&
+			!dma_set_mask(dev, DMA_BIT_MASK(64))) {
 		xhci_dbg(xhci, "Enabling 64-bit DMA addresses.\n");
-		dma_set_mask(hcd->self.controller, DMA_BIT_MASK(64));
-	} else {
-		dma_set_mask(hcd->self.controller, DMA_BIT_MASK(32));
+		dma_set_coherent_mask(dev, DMA_BIT_MASK(64));
 	}
 
 	xhci_dbg(xhci, "Calling HCD init\n");
