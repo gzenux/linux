@@ -2176,16 +2176,14 @@ static unsigned hub_is_wusb(struct usb_hub *hub)
 #define HUB_LONG_RESET_TIME	200
 #define HUB_RESET_TIMEOUT	800
 
-/* Is a USB 3.0 port in the Inactive or Complinance Mode state?
+/* Is a USB 3.0 port in the Inactive
  * Port worm reset is required to recover
  */
 static bool hub_port_warm_reset_required(struct usb_hub *hub, u16 portstatus)
 {
 	return hub_is_superspeed(hub->hdev) &&
 		(((portstatus & USB_PORT_STAT_LINK_STATE) ==
-		  USB_SS_PORT_LS_SS_INACTIVE) ||
-		 ((portstatus & USB_PORT_STAT_LINK_STATE) ==
-		  USB_SS_PORT_LS_COMP_MOD)) ;
+		  USB_SS_PORT_LS_SS_INACTIVE));
 }
 
 static int hub_port_wait_reset(struct usb_hub *hub, int port1,
