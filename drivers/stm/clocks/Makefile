@@ -3,6 +3,7 @@
 #
 
 clock-y					:= clk-common.o
+clock-$(CONFIG_CPU_SUBTYPE_STX7105)	:= clock-common.o clock-stx7105.o
 clock-$(CONFIG_CPU_SUBTYPE_STX7108)	:= clock-common.o clock-stx7108.o
 clock-$(CONFIG_CPU_SUBTYPE_STXH205)	:= clock-common.o clock-stxh205.o
 clock-$(CONFIG_MACH_STM_STIH407)	+= clock-stih407.o clock-stih410.o clk-flexgen.o

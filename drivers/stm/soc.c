@@ -48,6 +48,8 @@ const char *stm_soc(void)
 		return "STiH407";
 	if (stm_soc_is_stih415())
 		return "STiH415";
+	if (stm_soc_is_stx7105())
+		return "STx7105";
 	if (stm_soc_is_stx7108())
 		return "STx7108";
 	if (stm_soc_is_stih416())
