@@ -104,7 +104,8 @@ config MTD_SPEAR_SMI
 
 config MTD_STM_SPI_FSM
 	tristate "ST Microelectronics SPI-FSM Serial Flash Controller"
-	depends on (CPU_SUBTYPE_STX7108 || \
+	depends on (CPU_SUBTYPE_STX7105 || \
+		    CPU_SUBTYPE_STX7108 || \
 		    CPU_SUBTYPE_FLI7610 || \
 		    MACH_STM_STID127 || \
 		    CPU_SUBTYPE_STXH205 || \

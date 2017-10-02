@@ -19,7 +19,7 @@ static const char *cpu_name[] = {
 	[CPU_SH7751R]	= "SH7751R",	[CPU_SH7760]	= "SH7760",
 	[CPU_SH4_202]	= "SH4-202",	[CPU_SH4_501]	= "SH4-501",
 
-	[CPU_STX7108]   = "STx7108",
+	[CPU_STX7105]	= "STx7105",	[CPU_STX7108]   = "STx7108",
 	[CPU_STXH205]	= "STxH205",
 	[CPU_STIH415]   = "STiH415",
 	[CPU_STXH237]	= "STxH237",	[CPU_STXH273]	= "STxH273",
@@ -59,7 +59,7 @@ const char *get_cpu_variant(struct sh_cpuinfo *c)
 /* Symbolic CPU flags, keep in sync with asm/cpu-features.h */
 static const char *cpu_flags[] = {
 	"none", "fpu", "p2flush", "mmuassoc", "dsp", "perfctr",
-	"ptea", "llsc", "l2", "op32", "pteaex", NULL
+	"ptea", "llsc", "l2", "op32", "pteaex", "icbi", "synco", "fpchg", NULL
 };
 
 static void show_cpuflags(struct seq_file *m, struct sh_cpuinfo *c)
