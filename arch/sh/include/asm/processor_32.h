@@ -25,7 +25,7 @@
 #define CCN_PVR		0xff000030
 #define CCN_CVR		0xff000040
 #define CCN_PRR		0xff000044
-#define CCN_RAMCR	0xff000074
+#define CCN_RAMCR	0xff000074	/* ST40-300 */
 
 /*
  * User space process size: 2GB.

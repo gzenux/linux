@@ -59,6 +59,12 @@ void stm_of_soc_reset(char mode, const char *cmd);
 #define stm_soc_is_stih415()	(0)
 #endif
 
+#ifdef CONFIG_CPU_SUBTYPE_STX7105
+#define stm_soc_is_stx7105()	(1)
+#else
+#define stm_soc_is_stx7105()	(0)
+#endif
+
 #ifdef CONFIG_CPU_SUBTYPE_STX7108
 #define stm_soc_is_stx7108()	(1)
 #else
