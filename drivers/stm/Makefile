@@ -42,6 +42,7 @@ obj-$(CONFIG_STM_IRQ_MUX)		+= irqmux.o
 obj-$(CONFIG_CPU_SUBTYPE_STXH205)	+= stxh205_lpm.o
 obj-$(CONFIG_STM_LPM)			+= lpm_com.o lpm_mb.o
 
+obj-$(CONFIG_CPU_SUBTYPE_STX7105)	+= stx7105.o stx7105_clock.o stx7105_audio.o stx7105_comms.o stx7105_hispeed.o stx7105_pci.o
 obj-$(CONFIG_CPU_SUBTYPE_STX7108)	+= stx7108.o stx7108_clock.o stx7108_audio.o stx7108_comms.o stx7108_hispeed.o stx7108_pci.o pio-control.o
 obj-$(CONFIG_CPU_SUBTYPE_STXH205)	+= stxh205.o stxh205_clock.o stxh205_audio.o stxh205_comms.o stxh205_hispeed.o stxh205_pci.o pio-control.o
 obj-$(CONFIG_MACH_STM_STIH407)		+= pio-control.o stih407/

@@ -3,6 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/reboot.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #ifdef CONFIG_SUPERH32
 #include <asm/watchdog.h>
 #endif
@@ -22,8 +23,30 @@ static void watchdog_trigger_immediate(void)
 }
 #endif
 
+LIST_HEAD(restart_prep_handler_list);
+
+void register_prepare_restart_handler(void (*prepare_restart)(void))
+{
+	struct restart_prep_handler *s = (struct restart_prep_handler *)
+				kmalloc(sizeof(struct restart_prep_handler),
+				GFP_KERNEL);
+	s->prepare_restart = prepare_restart;
+	list_add(&(s->list), &(restart_prep_handler_list));
+}
+
 static void native_machine_restart(char * __unused)
 {
+	struct restart_prep_handler *tmp;
+	struct list_head *pos, *q;
+
+	/* Run any "prepare restart" handlers */
+	list_for_each_safe(pos, q, &restart_prep_handler_list) {
+		tmp = list_entry(pos, struct restart_prep_handler, list);
+		tmp->prepare_restart();
+		list_del(pos);
+		kfree(tmp);
+	}
+
 	local_irq_disable();
 
 	/* Destroy all of the TLBs in preparation for reset by MMU */

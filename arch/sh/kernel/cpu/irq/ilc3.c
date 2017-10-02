@@ -116,7 +116,11 @@ static LIST_HEAD(ilcs_list);
 int ilc2irq(unsigned int evtcode)
 {
 	struct ilc *ilc = irq_get_handler_data(evt2irq(evtcode));
+#if	defined(CONFIG_CPU_SUBTYPE_STX7105)
+	unsigned int priority = 14 - evt2irq(evtcode);
+#else
 	unsigned int priority = 7;
+#endif
 	unsigned long status;
 	int idx;
 
@@ -140,7 +144,11 @@ int ilc2irq(unsigned int evtcode)
 void ilc_irq_demux(unsigned int irq, struct irq_desc *desc)
 {
 	struct ilc *ilc = irq_get_handler_data(irq);
+#if	defined(CONFIG_CPU_SUBTYPE_STX7105)
+	unsigned int priority = 14 - irq;
+#else
 	unsigned int priority = 7;
+#endif
 	int handled = 0;
 	int idx;
 
@@ -210,7 +218,11 @@ static unsigned int startup_ilc_irq(struct irq_data *d)
 	ilc->priority[priority][_BANK(input)] |= _BIT(input);
 	spin_unlock_irqrestore(&ilc->lock, flags);
 
+#if	defined(CONFIG_CPU_SUBTYPE_STX7105)
+	ILC_SET_PRI(ilc->base, input, priority);
+#else
 	ILC_SET_PRI(ilc->base, input, 0x0);
+#endif
 
 	ILC_SET_ENABLE(ilc->base, input);
 
@@ -345,7 +357,7 @@ static struct irq_chip ilc_chip = {
 	.irq_shutdown	= shutdown_ilc_irq,
 	.irq_mask	= mask_ilc_irq,
 	.irq_mask_ack	= mask_and_ack_ilc,
-	.irq_unmask		= unmask_ilc_irq,
+	.irq_unmask	= unmask_ilc_irq,
 	.irq_set_type	= set_type_ilc_irq,
 	.irq_set_wake	= set_wake_ilc_irq,
 };

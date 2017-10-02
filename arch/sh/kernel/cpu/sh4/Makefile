@@ -26,10 +26,12 @@ obj-$(CONFIG_CPU_SUBTYPE_SH7751)	+= setup-sh7750.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7751R)	+= setup-sh7750.o
 obj-$(CONFIG_CPU_SUBTYPE_SH7760)	+= setup-sh7760.o
 obj-$(CONFIG_CPU_SUBTYPE_SH4_202)	+= setup-sh4-202.o
+obj-$(CONFIG_CPU_SUBTYPE_STX7105)	+= setup-stx7105.o
 
 # Primary on-chip clocks (common)
 ifndef CONFIG_CPU_SH4A
 clock-$(CONFIG_CPU_SH4)			:= clock-sh4.o
+clock-$(CONFIG_CPU_SUBTYPE_STX7105)	:= clock-stx7105.o
 endif
 
 # Additional clocks by subtype
@@ -42,9 +44,11 @@ obj-$(CONFIG_HAVE_HW_BREAKPOINT)	+= ubc.o
 obj-$(CONFIG_CPU_SUBTYPE_ST40)		+= stm-tmu.o
 
 cpufreq-y				:= cpufreq-stm.o
+cpufreq-$(CONFIG_CPU_SUBTYPE_STX7105)	+= cpufreq-stm_cpu_clk.o
 obj-$(CONFIG_STM_CPU_FREQ)		+= $(cpufreq-y)
 
 suspend-y				:= stm_suspend.o stm_suspend-core.o
+suspend-$(CONFIG_CPU_SUBTYPE_STX7105)	+= suspend-stx7105.o
 obj-$(CONFIG_SUSPEND)			+= $(suspend-y)
 
 hom-y					:= stm_hom.o stm_hom-core.o
