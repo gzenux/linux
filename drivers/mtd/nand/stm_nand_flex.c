@@ -367,34 +367,6 @@ static void flex_write_buf(struct mtd_info *mtd, const uint8_t *buf, int len)
 
 }
 
-static int flex_verify_buf(struct mtd_info *mtd, const uint8_t *buf, int len)
-{
-	struct stm_nand_flex_controller *flex = mtd_to_flex(mtd);
-	uint32_t *p = (uint32_t *)buf;
-	uint32_t d;
-	int ret = 0;
-	int i;
-
-	/* Switch to 4-byte reads */
-	flex_writereg(FLEX_DATA_CFG_BEATS_4 | FLEX_DATA_CFG_CSN,
-		      NANDHAM_FLEX_DATAREAD_CONFIG);
-
-	for (i = 0; i < len/4; i++) {
-		d = readl(flex->base_addr + NANDHAM_FLEX_DATA);
-		if (d != *p++) {
-			ret = -EFAULT;
-			goto out1;
-		}
-	}
-
- out1:
-	/* Switch back to 1-byte reads */
-	flex_writereg(FLEX_DATA_CFG_BEATS_1 | FLEX_DATA_CFG_CSN,
-		      NANDHAM_FLEX_DATAREAD_CONFIG);
-
-	return ret;
-}
-
 #ifdef CONFIG_STM_NAND_FLEX_BOOTMODESUPPORT
 /* The STMicroelectronics NAND boot-controller uses 3 bytes ECC per 128-byte
  * data record.  However, the ECC layout clashes with the factory-set bad-block
@@ -1002,7 +974,7 @@ static void flex_init_controller(struct stm_nand_flex_controller *flex)
 		      NANDHAM_FLEX_DATAREAD_CONFIG);
 }
 
-static struct stm_nand_flex_controller * __devinit
+static struct stm_nand_flex_controller *
 flex_init_resources(struct platform_device *pdev)
 {
 	struct stm_plat_nand_flex_data *pdata = pdev->dev.platform_data;
@@ -1068,7 +1040,7 @@ flex_init_resources(struct platform_device *pdev)
 	spin_lock_init(&flex->lock);
 #endif
 
-	flex->buf = kmalloc(NAND_MAX_PAGESIZE +  NAND_MAX_OOBSIZE,
+	flex->buf = kmalloc(STM_NAND_MAX_PAGESIZE +  STM_NAND_MAX_OOBSIZE,
 			   GFP_KERNEL | __GFP_DMA);
 	if (!flex->buf) {
 		printk(KERN_ERR NAME " Failed allocate bounce buffer\n");
@@ -1118,7 +1090,7 @@ static void flex_exit_controller(struct platform_device *pdev)
 	release_resource(flex->mem_region);
 }
 
-static struct stm_nand_flex_device * __devinit
+static struct stm_nand_flex_device *
 flex_init_bank(struct stm_nand_flex_controller *flex, int bank_nr,
 	       struct stm_nand_bank_data *bank,
 	       int rbn_connected, struct device *dev)
@@ -1163,7 +1135,6 @@ flex_init_bank(struct stm_nand_flex_controller *flex, int bank_nr,
 	/* Copy over chip specific platform data */
 	data->chip.options = bank->options;
 	data->chip.bbt_options = bank->bbt_options;
-	data->chip.options |= NAND_NO_AUTOINCR;      /* Not tested, disable */
 
 	data->chip.scan_bbt = stmnand_scan_bbt;
 
@@ -1177,7 +1148,6 @@ flex_init_bank(struct stm_nand_flex_controller *flex, int bank_nr,
 	data->chip.read_buf = flex_read_buf;
 #endif
 	data->chip.write_buf = flex_write_buf;
-	data->chip.verify_buf = flex_verify_buf;
 	data->chip.waitfunc = flex_nand_wait;
 	if (rbn_connected)
 		data->chip.dev_ready = flex_rbn;
@@ -1350,7 +1320,7 @@ static void *stm_flex_dt_get_pdata(struct platform_device *pdev)
 }
 #endif
 
-static int __devinit stm_nand_flex_probe(struct platform_device *pdev)
+static int stm_nand_flex_probe(struct platform_device *pdev)
 {
 	struct stm_plat_nand_flex_data *pdata;
 	int n;
@@ -1402,7 +1372,7 @@ static int __devinit stm_nand_flex_probe(struct platform_device *pdev)
 	return err;
 }
 
-static int __devexit stm_nand_flex_remove(struct platform_device *pdev)
+static int stm_nand_flex_remove(struct platform_device *pdev)
 {
 	struct stm_plat_nand_flex_data *pdata = pdev->dev.platform_data;
 	struct stm_nand_flex_controller *flex = platform_get_drvdata(pdev);

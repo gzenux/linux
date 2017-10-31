@@ -15,7 +15,6 @@
 
 #include <linux/types.h>
 #include <linux/device.h>
-#include <linux/mmc/sdhci.h>
 #include <linux/stm/amba_bridge.h>
 #include <linux/stm/flashss.h>
 

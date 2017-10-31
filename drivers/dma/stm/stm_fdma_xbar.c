@@ -64,7 +64,7 @@ static int stm_fdma_xbar_route(struct stm_fdma_dreq_router *router,
  * Platform driver initialise
  */
 
-static int __devinit stm_fdma_xbar_probe(struct platform_device *pdev)
+static int stm_fdma_xbar_probe(struct platform_device *pdev)
 {
 	struct stm_fdma_xbar *xbar;
 	struct resource *iores;
@@ -85,8 +85,8 @@ static int __devinit stm_fdma_xbar_probe(struct platform_device *pdev)
 	}
 
 	/* Request the xbar memory region and remap into uncached memory */
-	xbar->io_base = devm_request_and_ioremap(&pdev->dev, iores);
-	if (!xbar->io_base) {
+	xbar->io_base = devm_ioremap_resource(&pdev->dev, iores);
+	if (IS_ERR(xbar->io_base)) {
 		dev_err(&pdev->dev, "Failed to ioremap memory region\n");
 		return -EBUSY;
 	}
@@ -129,7 +129,7 @@ static int __devinit stm_fdma_xbar_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int __devexit stm_fdma_xbar_remove(struct platform_device *pdev)
+static int stm_fdma_xbar_remove(struct platform_device *pdev)
 {
 	struct stm_fdma_xbar *xbar = platform_get_drvdata(pdev);
 

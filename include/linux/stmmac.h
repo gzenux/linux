@@ -123,6 +123,8 @@ struct plat_stmmacenet_data {
 	void *bus_data;
 	int (*init)(struct platform_device *pdev, void *priv);
 	void (*exit)(struct platform_device *pdev, void *priv);
+	void *custom_cfg;
+	void *custom_data;
 	void *bsp_priv;
 };
 #endif

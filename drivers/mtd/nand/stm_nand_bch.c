@@ -2742,7 +2742,7 @@ static void nandi_init_bch(struct nandi_controller *nandi, int emi_bank)
 	nandi_enable_interrupts(nandi, NAND_INT_ENABLE);
 }
 
-static int __devinit remap_named_resource(struct platform_device *pdev,
+static int remap_named_resource(struct platform_device *pdev,
 					  char *name,
 					  void __iomem **io_ptr)
 {
@@ -2769,7 +2769,7 @@ static int __devinit remap_named_resource(struct platform_device *pdev,
 	return 0;
 }
 
-static struct nandi_controller * __devinit
+static struct nandi_controller *
 nandi_init_resources(struct platform_device *pdev)
 {
 	struct nandi_controller *nandi;
@@ -2804,7 +2804,7 @@ nandi_init_resources(struct platform_device *pdev)
 	}
 
 	err = devm_request_irq(&pdev->dev, irq, nandi_irq_handler,
-			       IRQF_DISABLED, dev_name(&pdev->dev), nandi);
+			       0x0, dev_name(&pdev->dev), nandi);
 	if (err) {
 		dev_err(&pdev->dev, "irq request failed\n");
 		return ERR_PTR(err);
@@ -2874,7 +2874,7 @@ static void *stm_bch_dt_get_pdata(struct platform_device *pdev)
 }
 #endif
 
-static int __devinit stm_nand_bch_probe(struct platform_device *pdev)
+static int stm_nand_bch_probe(struct platform_device *pdev)
 {
 	const char *part_probes[] = { "cmdlinepart", "ofpart", NULL, };
 	struct stm_plat_nand_bch_data *pdata;
@@ -3071,7 +3071,7 @@ static int __devinit stm_nand_bch_probe(struct platform_device *pdev)
 	return err;
 }
 
-static int __devexit stm_nand_bch_remove(struct platform_device *pdev)
+static int stm_nand_bch_remove(struct platform_device *pdev)
 {
 	struct nandi_controller *nandi = platform_get_drvdata(pdev);
 

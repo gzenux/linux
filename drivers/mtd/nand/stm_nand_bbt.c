@@ -153,7 +153,7 @@ static int stmnand_check_bbt_block(struct mtd_info *mtd, uint64_t offs,
 
 	/* Try linux BBT signatures */
 	for (i = 0; i < ARRAY_SIZE(bbt_descrs); i++) {
-		ret = scan_read_raw_oob(mtd, buf, offs, mtd->writesize);
+		ret = scan_read_oob(mtd, buf, offs, mtd->writesize);
 		if (ret < 0)
 			return ret;
 
@@ -204,7 +204,7 @@ static int stmnand_check_bbt_block(struct mtd_info *mtd, uint64_t offs,
 	/* Try BCH 'inband' signatures */
 	offs_bch_sig = offs + mtd->erasesize - mtd->writesize;
 	for (i = 0; i < ARRAY_SIZE(ibbt_pats); i++) {
-		ret = scan_read_raw_oob(mtd, buf, offs_bch_sig, mtd->writesize);
+		ret = scan_read_oob(mtd, buf, offs_bch_sig, mtd->writesize);
 		if (ret < 0)
 			return ret;
 

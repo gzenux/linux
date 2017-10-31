@@ -10,6 +10,7 @@
 
 #include <linux/init.h>
 #include <linux/clk.h>
+#include <linux/clkdev.h>
 
 int __init stih416_plat_clk_alias_init(void)
 {

@@ -95,6 +95,11 @@
 const char power_group_name[] = "power";
 EXPORT_SYMBOL_GPL(power_group_name);
 
+#ifdef CONFIG_PM_SLEEP
+static const char _enabled[] = "enabled";
+static const char _disabled[] = "disabled";
+#endif
+
 static const char ctrl_auto[] = "auto";
 static const char ctrl_on[] = "on";
 
@@ -154,6 +159,7 @@ static ssize_t rtpm_suspended_time_show(struct device *dev,
 
 static DEVICE_ATTR(runtime_suspended_time, 0444, rtpm_suspended_time_show, NULL);
 
+#ifdef CONFIG_PM_SLEEP
 static ssize_t
 rtpm_status_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
@@ -161,17 +167,21 @@ rtpm_status_store(struct device *dev,
 	if (dev->power.disable_depth)
 		return count;
 
-	if (!strncmp(buf, disabled, 8)) {
-		if (pm_runtime_status_suspended(dev))
-			return count;
-		pm_runtime_put(dev);
-	} else if (!strncmp(buf, enabled, 7)) {
+	device_lock(dev);
+	if (!strncmp(buf, _disabled, 8)) {
+		if (!pm_runtime_status_suspended(dev))
+			pm_runtime_put(dev);
+	} else if (!strncmp(buf, _enabled, 7)) {
 		if (pm_runtime_status_suspended(dev))
 			pm_runtime_get_sync(dev);
 	}
+	device_unlock(dev);
 
 	return count;
 }
+#else
+#define rtpm_status_store NULL
+#endif
 
 static ssize_t rtpm_status_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -350,9 +360,6 @@ static DEVICE_ATTR(pm_qos_remote_wakeup, 0644,
 		   pm_qos_remote_wakeup_show, pm_qos_remote_wakeup_store);
 
 #ifdef CONFIG_PM_SLEEP
-static const char _enabled[] = "enabled";
-static const char _disabled[] = "disabled";
-
 static ssize_t
 wake_show(struct device * dev, struct device_attribute *attr, char * buf)
 {

@@ -95,7 +95,7 @@ static struct rtc_class_ops stm_sbc_rtc_ops = {
 };
 
 
-static int __devinit stm_sbc_rtc_probe(struct platform_device *pdev)
+static int stm_sbc_rtc_probe(struct platform_device *pdev)
 {
 	struct stm_sbc_rtc *rtc;
 	int ret = 0;
@@ -125,7 +125,7 @@ err_badreg:
 	return ret;
 }
 
-static int __devexit stm_sbc_rtc_remove(struct platform_device *pdev)
+static int stm_sbc_rtc_remove(struct platform_device *pdev)
 {
 	struct stm_sbc_rtc *rtc = platform_get_drvdata(pdev);
 
@@ -167,7 +167,7 @@ static struct platform_driver stm_rtc_platform_driver = {
 		.pm = STM_SBC_RTC_PM_OPS,
 	},
 	.probe = stm_sbc_rtc_probe,
-	.remove = __devexit_p(stm_sbc_rtc_remove),
+	.remove = stm_sbc_rtc_remove,
 };
 
 static int __init stm_sbc_rtc_init(void)

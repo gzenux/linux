@@ -20,7 +20,6 @@
 #include <linux/delay.h>
 #include <linux/console.h>
 #include <linux/gpio.h>
-#include <linux/generic_serial.h>
 #include <linux/spinlock.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
@@ -289,7 +288,7 @@ static struct uart_ops asc_uart_ops = {
 	.verify_port	= asc_verify_port,
 };
 
-static void __devinit asc_init_port(struct asc_port *ascport,
+static void asc_init_port(struct asc_port *ascport,
 	struct platform_device *pdev,
 	struct stm_plat_asc_data *plat_data, int id)
 {
@@ -475,7 +474,7 @@ static int __init asc_late_console_init(void)
 core_initcall(asc_late_console_init);
 #endif
 
-static int __devinit asc_serial_probe(struct platform_device *pdev)
+static int asc_serial_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct asc_port *ascport;
@@ -521,7 +520,7 @@ static int __devinit asc_serial_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int __devexit asc_serial_remove(struct platform_device *pdev)
+static int asc_serial_remove(struct platform_device *pdev)
 {
 	struct asc_port *ascport = platform_get_drvdata(pdev);
 	struct uart_port *port = &ascport->port;
@@ -644,7 +643,7 @@ MODULE_DEVICE_TABLE(of, stm_asc_match);
 
 static struct platform_driver asc_serial_driver = {
 	.probe		= asc_serial_probe,
-	.remove		= __devexit_p(asc_serial_remove),
+	.remove		= asc_serial_remove,
 	.driver	= {
 		.name	= DRIVER_NAME,
 		.pm	= &asc_serial_pm_ops,
@@ -939,11 +938,11 @@ static inline void asc_receive_chars(struct uart_port *port)
 
 			if (uart_handle_sysrq_char(port, c))
 				continue;
-			tty_insert_flip_char(tty, c & 0xff, flag);
+			tty_insert_flip_char(tty->port, c & 0xff, flag);
 		}
 		if (overrun) {
 			port->icount.overrun++;
-			tty_insert_flip_char(tty, 0, TTY_OVERRUN);
+			tty_insert_flip_char(tty->port, 0, TTY_OVERRUN);
 		}
 
 		copied = 1;
@@ -952,7 +951,7 @@ static inline void asc_receive_chars(struct uart_port *port)
 	if (copied) {
 		/* Tell the rest of the system the news. New characters! */
 		spin_unlock(&port->lock);
-		tty_flip_buffer_push(tty);
+		tty_flip_buffer_push(tty->port);
 		spin_lock(&port->lock);
 	}
 }

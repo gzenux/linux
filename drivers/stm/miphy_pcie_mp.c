@@ -211,7 +211,7 @@ void *pcie_mp_of_get_pdata(struct platform_device *pdev)
 	return data;
 }
 
-static int __devinit pcie_mp_probe(struct platform_device *pdev)
+static int pcie_mp_probe(struct platform_device *pdev)
 {
 	struct pcie_mp_device *mp_dev;
 	struct stm_miphy_device *miphy_dev;
@@ -234,17 +234,17 @@ static int __devinit pcie_mp_probe(struct platform_device *pdev)
 	/* Do we have a dedicated PCIE uport ?*/
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pcie-uport");
 	if (res)
-		mp_dev->pcie_base = devm_request_and_ioremap(&pdev->dev, res);
+		mp_dev->pcie_base = devm_ioremap_resource(&pdev->dev, res);
 
 	/* Do we have a dedicated SATA uport ?*/
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "sata-uport");
 	if (res)
-		mp_dev->sata_base = devm_request_and_ioremap(&pdev->dev, res);
+		mp_dev->sata_base = devm_ioremap_resource(&pdev->dev, res);
 
 	/* Do we have a dedicated USB3 uport ?*/
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "usb3-uport");
 	if (res)
-		mp_dev->usb3_base = devm_request_and_ioremap(&pdev->dev, res);
+		mp_dev->usb3_base = devm_ioremap_resource(&pdev->dev, res);
 
 	/* We have got to have at least one of these! */
 	if (!mp_dev->pcie_base && !mp_dev->sata_base && !mp_dev->usb3_base) {
@@ -255,8 +255,8 @@ static int __devinit pcie_mp_probe(struct platform_device *pdev)
 	/* Check for PIPE registers, only present for PCIe and USB3 HC */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pipew");
 	if (res) {
-		mp_dev->pipe_base = devm_request_and_ioremap(&pdev->dev, res);
-		if (!mp_dev->pipe_base) {
+		mp_dev->pipe_base = devm_ioremap_resource(&pdev->dev, res);
+		if (IS_ERR(mp_dev->pipe_base)) {
 			dev_err(&pdev->dev, "Unable to map PIPE registers\n");
 			return -EINVAL;
 		}

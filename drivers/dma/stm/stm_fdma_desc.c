@@ -216,30 +216,6 @@ void stm_fdma_desc_start(struct stm_fdma_chan *fchan)
 	}
 }
 
-void stm_fdma_desc_unmap_buffers(struct stm_fdma_desc *fdesc)
-{
-	struct dma_async_tx_descriptor *desc = &fdesc->dma_desc;
-	struct device *dev = desc->chan->device->dev;
-
-	if (!(desc->flags & DMA_COMPL_SKIP_SRC_UNMAP)) {
-		if (desc->flags & DMA_COMPL_SRC_UNMAP_SINGLE)
-			dma_unmap_single(dev, fdesc->llu->saddr,
-					fdesc->llu->nbytes, DMA_MEM_TO_DEV);
-		else
-			dma_unmap_page(dev, fdesc->llu->saddr,
-					fdesc->llu->nbytes, DMA_MEM_TO_DEV);
-	}
-
-	if (!(desc->flags & DMA_COMPL_SKIP_DEST_UNMAP)) {
-		if (desc->flags & DMA_COMPL_DEST_UNMAP_SINGLE)
-			dma_unmap_single(dev, fdesc->llu->daddr,
-					fdesc->llu->nbytes, DMA_DEV_TO_MEM);
-		else
-			dma_unmap_page(dev, fdesc->llu->daddr,
-					fdesc->llu->nbytes, DMA_DEV_TO_MEM);
-	}
-}
-
 void stm_fdma_desc_complete(unsigned long data)
 {
 	struct stm_fdma_chan *fchan = (struct stm_fdma_chan *) data;
@@ -282,10 +258,10 @@ void stm_fdma_desc_complete(unsigned long data)
 		if (!fchan->dma_chan.private) {
 			struct stm_fdma_desc *child;
 
-			stm_fdma_desc_unmap_buffers(fdesc);
+			dma_descriptor_unmap(&fdesc->dma_desc);
 
 			list_for_each_entry(child, &fdesc->llu_list, node)
-					stm_fdma_desc_unmap_buffers(child);
+					dma_descriptor_unmap(&child->dma_desc);
 		}
 
 		/*

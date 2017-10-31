@@ -261,7 +261,8 @@ static ssize_t coproc_store_state(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR(state, S_IRWXUGO, coproc_show_state,
+/* Fix permission to 0775 since S_IWOTH will cause compilation error due to VERIFY_OCTAL_PERMISSIONS() macro */
+static DEVICE_ATTR(state, 0775, coproc_show_state,
 		coproc_store_state);
 
 static ssize_t coproc_show_mem_size(struct device *dev,

@@ -3157,36 +3157,6 @@ int stmmac_resume(struct net_device *ndev)
 }
 EXPORT_SYMBOL_GPL(stmmac_resume);
 
-/* Driver can be configured w/ and w/ both PCI and Platf drivers
- * depending on the configuration selected.
- */
-static int __init stmmac_init(void)
-{
-	int ret;
-
-	ret = stmmac_register_platform();
-	if (ret)
-		goto err;
-	ret = stmmac_register_pci();
-	if (ret)
-		goto err_pci;
-	return 0;
-err_pci:
-	stmmac_unregister_platform();
-err:
-	pr_err("stmmac: driver registration failed\n");
-	return ret;
-}
-
-static void __exit stmmac_exit(void)
-{
-	stmmac_unregister_platform();
-	stmmac_unregister_pci();
-}
-
-module_init(stmmac_init);
-module_exit(stmmac_exit);
-
 #ifndef MODULE
 static int __init stmmac_cmdline_opt(char *str)
 {

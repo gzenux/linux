@@ -83,7 +83,6 @@
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/of.h>
-#include <linux/of_i2c.h>
 #include <linux/stm/platform.h>
 #include <linux/stm/ssc.h>
 
@@ -1229,7 +1228,7 @@ static int iic_stm_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 	if (devm_request_irq(&pdev->dev, res->start, iic_state_machine,
-			     IRQF_DISABLED, "i2c", i2c_stm) < 0) {
+			     0x0, "i2c", i2c_stm) < 0) {
 		dev_err(&pdev->dev, "Request irq %d failed\n", res->start);
 		return -ENODEV;
 	}
@@ -1254,6 +1253,7 @@ static int iic_stm_probe(struct platform_device *pdev)
 	i2c_stm->adapter.nr = id;
 	i2c_stm->adapter.algo = &iic_stm_algo;
 	i2c_stm->adapter.dev.parent = &(pdev->dev);
+	i2c_stm->adapter.dev.of_node = pdev->dev.of_node;
 	if (plat_data->i2c_speed == 400)
 		i2c_stm->config = IIC_STM_CONFIG_SPEED_FAST;
 	else
@@ -1281,9 +1281,6 @@ static int iic_stm_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Cannot create fastmode sysfs entry\n");
 		return err;
 	}
-
-	i2c_stm->adapter.dev.of_node = pdev->dev.of_node;
-	of_i2c_register_devices(&i2c_stm->adapter);
 
 	/* by default the device is on */
 	pm_runtime_set_active(&pdev->dev);

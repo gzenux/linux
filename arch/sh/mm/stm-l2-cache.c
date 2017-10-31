@@ -116,12 +116,14 @@ static int stm_l2_perf_seq_printf_counter(struct seq_file *s,
 	switch (counter->type) {
 	case EVENT:
 		address = stm_l2_base + L2ECA(counter->index);
-		return seq_printf(s, "%u", readl(address));
+		seq_printf(s, "%u", readl(address));
+		return 0;
 	case CYCLE:
 		address = stm_l2_base + L2CCA(counter->index);
 		val64 = readl(address + 4) & 0xffff;
 		val64 = (val64 << 32) | readl(address);
-		return seq_printf(s, "%llu", val64);
+		seq_printf(s, "%llu", val64);
+		return 0;
 	}
 	BUG();
 	return -EFAULT;
@@ -690,7 +692,7 @@ late_initcall(stm_l2_sysfs_init);
 
 /* Driver initialization */
 
-static int __devinit stm_l2_probe(struct platform_device *pdev)
+static int stm_l2_probe(struct platform_device *pdev)
 {
 	struct resource *mem;
 	unsigned long addr, size;

@@ -307,7 +307,7 @@ static void *stm_rtc_get_pdata(struct platform_device *pdev)
 	return data;
 }
 
-static int __devinit stm_rtc_probe(struct platform_device *pdev)
+static int stm_rtc_probe(struct platform_device *pdev)
 {
 	struct stm_plat_rtc_lpc *plat_data;
 	struct stm_rtc *rtc;
@@ -377,7 +377,7 @@ static int __devinit stm_rtc_probe(struct platform_device *pdev)
 	irq_set_irq_type(rtc->irq, plat_data->irq_edge_level);
 	enable_irq_wake(rtc->irq);
 	if (devm_request_irq(&pdev->dev, rtc->irq, stm_rtc_irq,
-		IRQF_DISABLED, DRV_NAME, rtc) < 0){
+		0x0, DRV_NAME, rtc) < 0){
 		pr_err("%s: Request irq not done\n", __func__);
 		return -ENODEV;
 	}
@@ -427,7 +427,7 @@ err_badres:
 	return ret;
 }
 
-static int __devexit stm_rtc_remove(struct platform_device *pdev)
+static int stm_rtc_remove(struct platform_device *pdev)
 {
 	struct stm_rtc *rtc = platform_get_drvdata(pdev);
 
@@ -461,7 +461,7 @@ static struct platform_driver stm_rtc_platform_driver = {
 		.of_match_table = of_match_ptr(stm_rtc_match),
 	},
 	.probe = stm_rtc_probe,
-	.remove = __devexit_p(stm_rtc_remove),
+	.remove = stm_rtc_remove,
 };
 
 static int __init stm_rtc_init(void)

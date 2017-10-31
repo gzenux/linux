@@ -1038,7 +1038,8 @@ void __init stx7108_early_device_init(void)
 
 	/* We haven't configured the LPC, so the sleep instruction may
 	 * do bad things. Thus we disable it here. */
-	disable_hlt();
+	/* FIXME: disable_hlt() was not available since the idle method has changed to use generic idle loop */
+	/* disable_hlt(); */
 }
 
 
