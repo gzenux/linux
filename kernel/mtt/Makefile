@@ -22,3 +22,5 @@ ifdef CONFIG_KPTRACE
 mtt-objs += kptrace.o \
 	../../arch/$(ARCH)/kernel/mtt-kptrace.o
 endif
+
+ccflags-$(CONFIG_MTT) += -Wno-error=date-time
