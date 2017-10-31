@@ -1483,7 +1483,7 @@ static int bch_mtd_read(struct mtd_info *mtd, loff_t from, size_t len,
 	if (!len)
 		return 0;
 
-	nand_get_device(chip, mtd, FL_READING);
+	nand_get_device(mtd, FL_READING);
 
 	ret = bch_read(nandi, from, len, retlen, buf);
 
@@ -1517,7 +1517,7 @@ static int bch_mtd_write(struct mtd_info *mtd, loff_t to, size_t len,
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_WRITING);
+	nand_get_device(mtd, FL_WRITING);
 
 	if (flex_check_wp(nandi)) {
 		dev_dbg(nandi->dev, "device is write-protected\n");
@@ -1727,7 +1727,7 @@ static int bch_mtd_read_oob(struct mtd_info *mtd, loff_t from,
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_READING);
+	nand_get_device(mtd, FL_READING);
 
 	ret = flex_do_read_ops(nandi, from, ops);
 
@@ -1797,7 +1797,7 @@ static int bch_mtd_write_oob(struct mtd_info *mtd, loff_t to,
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_WRITING);
+	nand_get_device(mtd, FL_WRITING);
 
 	if (flex_check_wp(nandi)) {
 		dev_dbg(nandi->dev, "device is write-protected\n");
@@ -1851,7 +1851,7 @@ static int bch_mtd_block_markbad(struct mtd_info *mtd, loff_t offs)
 	bbt_set_block_mark(nandi->info.bbt_info.bbt, block, BBT_MARK_BAD_WEAR);
 
 	/* Update BBTs, incrementing bbt_vers */
-	nand_get_device(chip, mtd, FL_WRITING);
+	nand_get_device(mtd, FL_WRITING);
 	ret = bch_update_bbts(nandi, &nandi->info.bbt_info,
 			      NAND_IBBT_UPDATE_BOTH,
 			      nandi->info.bbt_info.bbt_vers[0] + 1);
@@ -1892,7 +1892,7 @@ static int bch_mtd_erase(struct mtd_info *mtd, struct erase_info *instr)
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_ERASING);
+	nand_get_device(mtd, FL_ERASING);
 	instr->fail_addr = MTD_FAIL_ADDR_UNKNOWN;
 
 	if (flex_check_wp(nandi)) {
@@ -1983,8 +1983,8 @@ static char *nand_cmd_strs[256] = {
 	[NAND_CMD_RNDIN]	= "RNDIN",
 	[NAND_CMD_PARAM]	= "PARAM",
 	[NAND_CMD_RESET]	= "RESET",
-	[NAND_CMD_SETFEATURES]	= "SETFEATURES",
-	[NAND_CMD_GETFEATURES]	= "GETFEATURES",
+	[NAND_CMD_SET_FEATURES]	= "SETFEATURES",
+	[NAND_CMD_GET_FEATURES]	= "GETFEATURES",
 	[NAND_CMD_READSTART]	= "READSTART",
 	[NAND_CMD_RNDOUTSTART]	= "RNDOUTSTART",
 	[NAND_CMD_CACHEDPROG]	= "CACHEDPROG",

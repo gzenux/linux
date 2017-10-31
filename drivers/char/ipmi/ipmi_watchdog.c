@@ -141,17 +141,6 @@
 
 #define IPMI_WDOG_TIMER_NOT_INIT_RESP	0x80
 
-/* These are here until the real ones get into the watchdog.h interface. */
-#ifndef WDIOC_GETTIMEOUT
-#define	WDIOC_GETTIMEOUT        _IOW(WATCHDOG_IOCTL_BASE, 20, int)
-#endif
-#ifndef WDIOC_SET_PRETIMEOUT
-#define	WDIOC_SET_PRETIMEOUT     _IOW(WATCHDOG_IOCTL_BASE, 21, int)
-#endif
-#ifndef WDIOC_GET_PRETIMEOUT
-#define	WDIOC_GET_PRETIMEOUT     _IOW(WATCHDOG_IOCTL_BASE, 22, int)
-#endif
-
 static DEFINE_MUTEX(ipmi_watchdog_mutex);
 static bool nowayout = WATCHDOG_NOWAYOUT;
 
@@ -163,6 +152,9 @@ static int timeout = 10;
 
 /* The pre-timeout is disabled by default. */
 static int pretimeout;
+
+/* Default timeout to set on panic */
+static int panic_wdt_timeout = 255;
 
 /* Default action is to reset the board on a timeout. */
 static unsigned char action_val = WDOG_TIMEOUT_RESET;
@@ -219,7 +211,7 @@ static int set_param_timeout(const char *val, const struct kernel_param *kp)
 	return rv;
 }
 
-static struct kernel_param_ops param_ops_timeout = {
+static const struct kernel_param_ops param_ops_timeout = {
 	.set = set_param_timeout,
 	.get = param_get_int,
 };
@@ -281,14 +273,14 @@ static int set_param_wdog_ifnum(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static struct kernel_param_ops param_ops_wdog_ifnum = {
+static const struct kernel_param_ops param_ops_wdog_ifnum = {
 	.set = set_param_wdog_ifnum,
 	.get = param_get_int,
 };
 
 #define param_check_wdog_ifnum param_check_int
 
-static struct kernel_param_ops param_ops_str = {
+static const struct kernel_param_ops param_ops_str = {
 	.set = set_param_str,
 	.get = get_param_str,
 };
@@ -303,6 +295,9 @@ MODULE_PARM_DESC(timeout, "Timeout value in seconds.");
 
 module_param(pretimeout, timeout, 0644);
 MODULE_PARM_DESC(pretimeout, "Pretimeout value in seconds.");
+
+module_param(panic_wdt_timeout, timeout, 0644);
+MODULE_PARM_DESC(timeout, "Timeout value on kernel panic in seconds.");
 
 module_param_cb(action, &param_ops_str, action_op, 0644);
 MODULE_PARM_DESC(action, "Timeout action. One of: "
@@ -732,7 +727,6 @@ static int ipmi_ioctl(struct file *file,
 			return -EFAULT;
 		return 0;
 
-	case WDIOC_SET_PRETIMEOUT:
 	case WDIOC_SETPRETIMEOUT:
 		i = copy_from_user(&val, argp, sizeof(int));
 		if (i)
@@ -740,7 +734,6 @@ static int ipmi_ioctl(struct file *file,
 		pretimeout = val;
 		return ipmi_set_timeout(IPMI_SET_TIMEOUT_HB_IF_NECESSARY);
 
-	case WDIOC_GET_PRETIMEOUT:
 	case WDIOC_GETPRETIMEOUT:
 		i = copy_to_user(argp, &pretimeout, sizeof(pretimeout));
 		if (i)
@@ -1202,7 +1195,7 @@ static int wdog_panic_handler(struct notifier_block *this,
 		/* Make sure we do this only once. */
 		panic_event_handled = 1;
 
-		timeout = 255;
+		timeout = panic_wdt_timeout;
 		pretimeout = 0;
 		panic_halt_ipmi_set_timeout();
 	}

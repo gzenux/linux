@@ -10,7 +10,10 @@
 #include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
 #include <linux/securebits.h>
+#include <linux/seqlock.h>
+#include <linux/rbtree.h>
 #include <net/net_namespace.h>
+#include <linux/sched/rt.h>
 
 #ifdef CONFIG_SMP
 # define INIT_PUSHABLE_TASKS(tsk)					\
@@ -22,22 +25,24 @@
 extern struct files_struct init_files;
 extern struct fs_struct init_fs;
 
-#ifdef CONFIG_CGROUPS
-#define INIT_GROUP_RWSEM(sig)						\
-	.group_rwsem = __RWSEM_INITIALIZER(sig.group_rwsem),
+#ifdef CONFIG_CPUSETS
+#define INIT_CPUSET_SEQ(tsk)							\
+	.mems_allowed_seq = SEQCNT_ZERO(tsk.mems_allowed_seq),
 #else
-#define INIT_GROUP_RWSEM(sig)
+#define INIT_CPUSET_SEQ(tsk)
 #endif
 
-#ifdef CONFIG_CPUSETS
-#define INIT_CPUSET_SEQ							\
-	.mems_allowed_seq = SEQCNT_ZERO,
+#ifndef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
+#define INIT_PREV_CPUTIME(x)	.prev_cputime = {			\
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(x.prev_cputime.lock),		\
+},
 #else
-#define INIT_CPUSET_SEQ
+#define INIT_PREV_CPUTIME(x)
 #endif
 
 #define INIT_SIGNALS(sig) {						\
 	.nr_threads	= 1,						\
+	.thread_head	= LIST_HEAD_INIT(init_task.thread_node),	\
 	.wait_chldexit	= __WAIT_QUEUE_HEAD_INITIALIZER(sig.wait_chldexit),\
 	.shared_pending	= { 						\
 		.list = LIST_HEAD_INIT(sig.shared_pending.list),	\
@@ -46,13 +51,13 @@ extern struct fs_struct init_fs;
 	.cpu_timers	= INIT_CPU_TIMERS(sig.cpu_timers),		\
 	.rlim		= INIT_RLIMITS,					\
 	.cputimer	= { 						\
-		.cputime = INIT_CPUTIME,				\
-		.running = 0,						\
-		.lock = __RAW_SPIN_LOCK_UNLOCKED(sig.cputimer.lock),	\
+		.cputime_atomic	= INIT_CPUTIME_ATOMIC,			\
+		.running	= false,				\
+		.checking_timer = false,				\
 	},								\
+	INIT_PREV_CPUTIME(sig)						\
 	.cred_guard_mutex =						\
 		 __MUTEX_INITIALIZER(sig.cred_guard_mutex),		\
-	INIT_GROUP_RWSEM(sig)						\
 }
 
 extern struct nsproxy init_nsproxy;
@@ -92,19 +97,13 @@ extern struct group_info init_groups;
 
 #ifdef CONFIG_AUDITSYSCALL
 #define INIT_IDS \
-	.loginuid = -1, \
-	.sessionid = -1,
+	.loginuid = INVALID_UID, \
+	.sessionid = (unsigned int)-1,
 #else
 #define INIT_IDS
 #endif
 
-#ifdef CONFIG_RCU_BOOST
-#define INIT_TASK_RCU_BOOST()						\
-	.rcu_boost_mutex = NULL,
-#else
-#define INIT_TASK_RCU_BOOST()
-#endif
-#ifdef CONFIG_TREE_PREEMPT_RCU
+#ifdef CONFIG_PREEMPT_RCU
 #define INIT_TASK_RCU_TREE_PREEMPT()					\
 	.rcu_blocked_node = NULL,
 #else
@@ -113,18 +112,35 @@ extern struct group_info init_groups;
 #ifdef CONFIG_PREEMPT_RCU
 #define INIT_TASK_RCU_PREEMPT(tsk)					\
 	.rcu_read_lock_nesting = 0,					\
-	.rcu_read_unlock_special = 0,					\
+	.rcu_read_unlock_special.s = 0,					\
 	.rcu_node_entry = LIST_HEAD_INIT(tsk.rcu_node_entry),		\
-	INIT_TASK_RCU_TREE_PREEMPT()					\
-	INIT_TASK_RCU_BOOST()
+	INIT_TASK_RCU_TREE_PREEMPT()
 #else
 #define INIT_TASK_RCU_PREEMPT(tsk)
+#endif
+#ifdef CONFIG_TASKS_RCU
+#define INIT_TASK_RCU_TASKS(tsk)					\
+	.rcu_tasks_holdout = false,					\
+	.rcu_tasks_holdout_list =					\
+		LIST_HEAD_INIT(tsk.rcu_tasks_holdout_list),		\
+	.rcu_tasks_idle_cpu = -1,
+#else
+#define INIT_TASK_RCU_TASKS(tsk)
 #endif
 
 extern struct cred init_cred;
 
+extern struct task_group root_task_group;
+
+#ifdef CONFIG_CGROUP_SCHED
+# define INIT_CGROUP_SCHED(tsk)						\
+	.sched_task_group = &root_task_group,
+#else
+# define INIT_CGROUP_SCHED(tsk)
+#endif
+
 #ifdef CONFIG_PERF_EVENTS
-# define INIT_PERF_EVENTS(tsk)					\
+# define INIT_PERF_EVENTS(tsk)						\
 	.perf_event_mutex = 						\
 		 __MUTEX_INITIALIZER(tsk.perf_event_mutex),		\
 	.perf_event_list = LIST_HEAD_INIT(tsk.perf_event_list),
@@ -132,7 +148,40 @@ extern struct cred init_cred;
 # define INIT_PERF_EVENTS(tsk)
 #endif
 
+#ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
+# define INIT_VTIME(tsk)						\
+	.vtime_seqlock = __SEQLOCK_UNLOCKED(tsk.vtime_seqlock),	\
+	.vtime_snap = 0,				\
+	.vtime_snap_whence = VTIME_SYS,
+#else
+# define INIT_VTIME(tsk)
+#endif
+
 #define INIT_TASK_COMM "swapper"
+
+#ifdef CONFIG_RT_MUTEXES
+# define INIT_RT_MUTEXES(tsk)						\
+	.pi_waiters = RB_ROOT,						\
+	.pi_waiters_leftmost = NULL,
+#else
+# define INIT_RT_MUTEXES(tsk)
+#endif
+
+#ifdef CONFIG_NUMA_BALANCING
+# define INIT_NUMA_BALANCING(tsk)					\
+	.numa_preferred_nid = -1,					\
+	.numa_group = NULL,						\
+	.numa_faults = NULL,
+#else
+# define INIT_NUMA_BALANCING(tsk)
+#endif
+
+#ifdef CONFIG_KASAN
+# define INIT_KASAN(tsk)						\
+	.kasan_depth = 1,
+#else
+# define INIT_KASAN(tsk)
+#endif
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -149,18 +198,22 @@ extern struct cred init_cred;
 	.normal_prio	= MAX_PRIO-20,					\
 	.policy		= SCHED_NORMAL,					\
 	.cpus_allowed	= CPU_MASK_ALL,					\
+	.nr_cpus_allowed= NR_CPUS,					\
 	.mm		= NULL,						\
 	.active_mm	= &init_mm,					\
+	.restart_block = {						\
+		.fn = do_no_restart_syscall,				\
+	},								\
 	.se		= {						\
 		.group_node 	= LIST_HEAD_INIT(tsk.se.group_node),	\
 	},								\
 	.rt		= {						\
 		.run_list	= LIST_HEAD_INIT(tsk.rt.run_list),	\
 		.time_slice	= RR_TIMESLICE,				\
-		.nr_cpus_allowed = NR_CPUS,				\
 	},								\
 	.tasks		= LIST_HEAD_INIT(tsk.tasks),			\
 	INIT_PUSHABLE_TASKS(tsk)					\
+	INIT_CGROUP_SCHED(tsk)						\
 	.ptraced	= LIST_HEAD_INIT(tsk.ptraced),			\
 	.ptrace_entry	= LIST_HEAD_INIT(tsk.ptrace_entry),		\
 	.real_parent	= &tsk,						\
@@ -168,8 +221,8 @@ extern struct cred init_cred;
 	.children	= LIST_HEAD_INIT(tsk.children),			\
 	.sibling	= LIST_HEAD_INIT(tsk.sibling),			\
 	.group_leader	= &tsk,						\
-	RCU_INIT_POINTER(.real_cred, &init_cred),			\
-	RCU_INIT_POINTER(.cred, &init_cred),				\
+	RCU_POINTER_INITIALIZER(real_cred, &init_cred),			\
+	RCU_POINTER_INITIALIZER(cred, &init_cred),			\
 	.comm		= INIT_TASK_COMM,				\
 	.thread		= INIT_THREAD,					\
 	.fs		= &init_fs,					\
@@ -192,6 +245,7 @@ extern struct cred init_cred;
 		[PIDTYPE_SID]  = INIT_PID_LINK(PIDTYPE_SID),		\
 	},								\
 	.thread_group	= LIST_HEAD_INIT(tsk.thread_group),		\
+	.thread_node	= LIST_HEAD_INIT(init_signals.thread_head),	\
 	INIT_IDS							\
 	INIT_PERF_EVENTS(tsk)						\
 	INIT_TRACE_IRQFLAGS						\
@@ -199,7 +253,13 @@ extern struct cred init_cred;
 	INIT_FTRACE_GRAPH						\
 	INIT_TRACE_RECURSION						\
 	INIT_TASK_RCU_PREEMPT(tsk)					\
-	INIT_CPUSET_SEQ							\
+	INIT_TASK_RCU_TASKS(tsk)					\
+	INIT_CPUSET_SEQ(tsk)						\
+	INIT_RT_MUTEXES(tsk)						\
+	INIT_PREV_CPUTIME(tsk)						\
+	INIT_VTIME(tsk)							\
+	INIT_NUMA_BALANCING(tsk)					\
+	INIT_KASAN(tsk)							\
 }
 
 

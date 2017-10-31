@@ -548,8 +548,7 @@ static void flex_select_eccparams(struct mtd_info *mtd, loff_t offs)
 }
 
 /* nand_base.c functions required by MTD interface functions defined below */
-int nand_get_device(struct nand_chip *chip, struct mtd_info *mtd,
-		    int new_state);
+int nand_get_device(struct mtd_info *mtd, int new_state);
 void nand_release_device(struct mtd_info *mtd);
 int nand_do_read_oob(struct mtd_info *mtd, loff_t from,
 		     struct mtd_oob_ops *ops);
@@ -587,7 +586,7 @@ static int nand_read(struct mtd_info *mtd, loff_t from, size_t len,
 	if (!len)
 		return 0;
 
-	nand_get_device(chip, mtd, FL_READING);
+	nand_get_device(mtd, FL_READING);
 
 	/** Added to support switching ECC format **/
 	flex_select_eccparams(mtd, from);
@@ -629,7 +628,7 @@ static int nand_read_oob(struct mtd_info *mtd, loff_t from,
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_READING);
+	nand_get_device(mtd, FL_READING);
 
 	/** Added to support switching ECC format **/
 	flex_select_eccparams(mtd, from);
@@ -677,7 +676,7 @@ static int nand_write(struct mtd_info *mtd, loff_t to, size_t len,
 	if (!len)
 		return 0;
 
-	nand_get_device(chip, mtd, FL_WRITING);
+	nand_get_device(mtd, FL_WRITING);
 
 	/** Added to support switching ECC format **/
 	flex_select_eccparams(mtd, to);
@@ -717,7 +716,7 @@ static int nand_write_oob(struct mtd_info *mtd, loff_t to,
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_WRITING);
+	nand_get_device(mtd, FL_WRITING);
 
 	flex_select_eccparams(mtd, to);
 

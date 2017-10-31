@@ -2,8 +2,8 @@
 #define _PARISC_DMA_MAPPING_H
 
 #include <linux/mm.h>
+#include <linux/scatterlist.h>
 #include <asm/cacheflush.h>
-#include <asm/scatterlist.h>
 
 /* See Documentation/DMA-API-HOWTO.txt */
 struct hppa_dma_ops {
@@ -45,6 +45,9 @@ extern struct hppa_dma_ops pcx_dma_ops;
 #endif
 
 extern struct hppa_dma_ops *hppa_dma_ops;
+
+#define dma_alloc_attrs(d, s, h, f, a) dma_alloc_coherent(d, s, h, f)
+#define dma_free_attrs(d, s, h, f, a) dma_free_coherent(d, s, h, f)
 
 static inline void *
 dma_alloc_coherent(struct device *dev, size_t size, dma_addr_t *dma_handle,
@@ -237,5 +240,20 @@ void * sba_get_iommu(struct parisc_device *dev);
 
 /* At the moment, we panic on error for IOMMU resource exaustion */
 #define dma_mapping_error(dev, x)	0
+
+/* This API cannot be supported on PA-RISC */
+static inline int dma_mmap_coherent(struct device *dev,
+				    struct vm_area_struct *vma, void *cpu_addr,
+				    dma_addr_t dma_addr, size_t size)
+{
+	return -EINVAL;
+}
+
+static inline int dma_get_sgtable(struct device *dev, struct sg_table *sgt,
+				  void *cpu_addr, dma_addr_t dma_addr,
+				  size_t size)
+{
+	return -EINVAL;
+}
 
 #endif

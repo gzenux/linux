@@ -153,7 +153,7 @@ static int lirc_thread(void *irctl)
 }
 
 
-static struct file_operations lirc_dev_fops = {
+static const struct file_operations lirc_dev_fops = {
 	.owner		= THIS_MODULE,
 	.read		= lirc_dev_fop_read,
 	.write		= lirc_dev_fop_write,
@@ -518,8 +518,7 @@ int lirc_dev_fop_close(struct inode *inode, struct file *file)
 
 	WARN_ON(mutex_lock_killable(&lirc_dev_lock));
 
-	if (ir->d.rdev)
-		rc_close(ir->d.rdev);
+	rc_close(ir->d.rdev);
 
 	ir->open--;
 	if (ir->attached) {
@@ -541,7 +540,7 @@ EXPORT_SYMBOL(lirc_dev_fop_close);
 
 unsigned int lirc_dev_fop_poll(struct file *file, poll_table *wait)
 {
-	struct irctl *ir = irctls[iminor(file->f_dentry->d_inode)];
+	struct irctl *ir = irctls[iminor(file_inode(file))];
 	unsigned int ret;
 
 	if (!ir) {
@@ -554,14 +553,14 @@ unsigned int lirc_dev_fop_poll(struct file *file, poll_table *wait)
 	if (!ir->attached)
 		return POLLERR;
 
-	poll_wait(file, &ir->buf->wait_poll, wait);
+	if (ir->buf) {
+		poll_wait(file, &ir->buf->wait_poll, wait);
 
-	if (ir->buf)
 		if (lirc_buffer_empty(ir->buf))
 			ret = 0;
 		else
 			ret = POLLIN | POLLRDNORM;
-	else
+	} else
 		ret = POLLERR;
 
 	dev_dbg(ir->d.dev, LOGHEAD "poll result = %d\n",
@@ -575,7 +574,7 @@ long lirc_dev_fop_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	__u32 mode;
 	int result = 0;
-	struct irctl *ir = irctls[iminor(file->f_dentry->d_inode)];
+	struct irctl *ir = irctls[iminor(file_inode(file))];
 
 	if (!ir) {
 		printk(KERN_ERR "lirc_dev: %s: no irctl found!\n", __func__);
@@ -595,7 +594,7 @@ long lirc_dev_fop_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 	case LIRC_GET_FEATURES:
-		result = put_user(ir->d.features, (__u32 *)arg);
+		result = put_user(ir->d.features, (__u32 __user *)arg);
 		break;
 	case LIRC_GET_REC_MODE:
 		if (!(ir->d.features & LIRC_CAN_REC_MASK)) {
@@ -605,7 +604,7 @@ long lirc_dev_fop_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		result = put_user(LIRC_REC2MODE
 				  (ir->d.features & LIRC_CAN_REC_MASK),
-				  (__u32 *)arg);
+				  (__u32 __user *)arg);
 		break;
 	case LIRC_SET_REC_MODE:
 		if (!(ir->d.features & LIRC_CAN_REC_MASK)) {
@@ -613,7 +612,7 @@ long lirc_dev_fop_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		}
 
-		result = get_user(mode, (__u32 *)arg);
+		result = get_user(mode, (__u32 __user *)arg);
 		if (!result && !(LIRC_MODE2REC(mode) & ir->d.features))
 			result = -EINVAL;
 		/*
@@ -622,7 +621,7 @@ long lirc_dev_fop_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		 */
 		break;
 	case LIRC_GET_LENGTH:
-		result = put_user(ir->d.code_length, (__u32 *)arg);
+		result = put_user(ir->d.code_length, (__u32 __user *)arg);
 		break;
 	case LIRC_GET_MIN_TIMEOUT:
 		if (!(ir->d.features & LIRC_CAN_SET_REC_TIMEOUT) ||
@@ -631,7 +630,7 @@ long lirc_dev_fop_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		}
 
-		result = put_user(ir->d.min_timeout, (__u32 *)arg);
+		result = put_user(ir->d.min_timeout, (__u32 __user *)arg);
 		break;
 	case LIRC_GET_MAX_TIMEOUT:
 		if (!(ir->d.features & LIRC_CAN_SET_REC_TIMEOUT) ||
@@ -640,7 +639,7 @@ long lirc_dev_fop_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		}
 
-		result = put_user(ir->d.max_timeout, (__u32 *)arg);
+		result = put_user(ir->d.max_timeout, (__u32 __user *)arg);
 		break;
 	default:
 		result = -EINVAL;
@@ -660,7 +659,7 @@ ssize_t lirc_dev_fop_read(struct file *file,
 			  size_t length,
 			  loff_t *ppos)
 {
-	struct irctl *ir = irctls[iminor(file->f_dentry->d_inode)];
+	struct irctl *ir = irctls[iminor(file_inode(file))];
 	unsigned char *buf;
 	int ret = 0, written = 0;
 	DECLARE_WAITQUEUE(wait, current);
@@ -736,7 +735,7 @@ ssize_t lirc_dev_fop_read(struct file *file,
 			}
 		} else {
 			lirc_buffer_read(ir->buf, buf);
-			ret = copy_to_user((void *)buffer+written, buf,
+			ret = copy_to_user((void __user *)buffer+written, buf,
 					   ir->buf->chunk_size);
 			if (!ret)
 				written += ir->buf->chunk_size;
@@ -762,16 +761,7 @@ EXPORT_SYMBOL(lirc_dev_fop_read);
 
 void *lirc_get_pdata(struct file *file)
 {
-	void *data = NULL;
-
-	if (file && file->f_dentry && file->f_dentry->d_inode &&
-	    file->f_dentry->d_inode->i_rdev) {
-		struct irctl *ir;
-		ir = irctls[iminor(file->f_dentry->d_inode)];
-		data = ir->d.data;
-	}
-
-	return data;
+	return irctls[iminor(file_inode(file))]->d.data;
 }
 EXPORT_SYMBOL(lirc_get_pdata);
 
@@ -779,7 +769,7 @@ EXPORT_SYMBOL(lirc_get_pdata);
 ssize_t lirc_dev_fop_write(struct file *file, const char __user *buffer,
 			   size_t length, loff_t *ppos)
 {
-	struct irctl *ir = irctls[iminor(file->f_dentry->d_inode)];
+	struct irctl *ir = irctls[iminor(file_inode(file))];
 
 	if (!ir) {
 		printk(KERN_ERR "%s: called with invalid irctl\n", __func__);

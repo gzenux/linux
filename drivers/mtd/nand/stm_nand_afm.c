@@ -1356,7 +1356,7 @@ static int afm_block_markbad(struct mtd_info *mtd, loff_t offs)
 		 */
 		struct mtd_oob_ops ops;
 		memset(buf, 0, 16);
-		nand_get_device(chip, mtd, FL_WRITING);
+		nand_get_device(mtd, FL_WRITING);
 		offs += mtd->oobsize;
 		ops.mode = MTD_OPS_PLACE_OOB;
 		ops.len = 16;
@@ -1382,7 +1382,7 @@ static int afm_read(struct mtd_info *mtd, loff_t from, size_t len,
 	int ret;
 	struct mtd_oob_ops ops;
 
-	nand_get_device(chip, mtd, FL_READING);
+	nand_get_device(mtd, FL_READING);
 	afm_select_eccparams(mtd, from);
 
 	ops.len = len;
@@ -1412,7 +1412,7 @@ static int afm_read_oob(struct mtd_info *mtd, loff_t from,
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_READING);
+	nand_get_device(mtd, FL_READING);
 	afm_select_eccparams(mtd, from);
 
 	switch (ops->mode) {
@@ -1443,7 +1443,7 @@ static int afm_write(struct mtd_info *mtd, loff_t to, size_t len,
 	int ret;
 	struct mtd_oob_ops ops;
 
-	nand_get_device(chip, mtd, FL_WRITING);
+	nand_get_device(mtd, FL_WRITING);
 	afm_select_eccparams(mtd, to);
 
 	ops.len = len;
@@ -1474,7 +1474,7 @@ static int afm_write_oob(struct mtd_info *mtd, loff_t to,
 		return -EINVAL;
 	}
 
-	nand_get_device(chip, mtd, FL_WRITING);
+	nand_get_device(mtd, FL_WRITING);
 	afm_select_eccparams(mtd, to);
 
 	switch (ops->mode) {

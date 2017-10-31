@@ -2,3 +2,4 @@ elfconfig.h
 mk_elfconfig
 modpost
 ksymhash
+devicetable-offsets.h

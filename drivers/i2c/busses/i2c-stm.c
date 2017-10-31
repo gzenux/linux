@@ -573,7 +573,7 @@ be_fsm_stop:
 
 		if (++trsc->current_msg < trsc->queue_length) {
 			/* More transactions left... */
-			if (pmsg->flags & I2C_M_NOREPSTART) {
+			if (pmsg->flags & I2C_M_STOP) {
 				/* no repstart - stop then start */
 				dbg_print2(" STOP - STOP\n");
 				trsc->next_state = IIC_FSM_NOREPSTART;

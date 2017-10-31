@@ -55,8 +55,7 @@ struct mtd_info;
 #define MODULE_AUTHOR(x)	/* x */
 #define MODULE_DESCRIPTION(x)	/* x */
 
-#define printk printf
-#define KERN_ERR		""
+#define pr_err printf
 #endif
 
 /*
@@ -506,14 +505,13 @@ int __nand_correct_data(unsigned char *buf,
 
 	}
 	/* count nr of bits; use table lookup, faster than calculating it */
-
 	if ((bitsperbyte[b0] + bitsperbyte[b1] + bitsperbyte[b2]) == 1) {
 		printk(KERN_DEBUG "%s: ignoring error in ECC, data ok: [",
 		       __func__);
 		return 1;	/* error in ecc data; no action needed */
 	}
 
-	printk(KERN_ERR "%s: uncorrectable error: [", __func__);
+	pr_err("%s: uncorrectable ECC error\n", __func__);
 	return -1;
 }
 EXPORT_SYMBOL(__nand_correct_data);

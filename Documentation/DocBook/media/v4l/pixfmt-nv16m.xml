@@ -1,37 +1,38 @@
-    <refentry id="V4L2-PIX-FMT-NV16M">
+    <refentry>
       <refmeta>
-     <refentrytitle>V4L2_PIX_FMT_NV16M ('NM16')</refentrytitle>
+	<refentrytitle>V4L2_PIX_FMT_NV16M ('NM16'), V4L2_PIX_FMT_NV61M ('NM61')</refentrytitle>
 	&manvol;
       </refmeta>
       <refnamediv>
-     <refname> <constant>V4L2_PIX_FMT_NV16M</constant></refname>
-     <refpurpose>Variation of <constant>V4L2_PIX_FMT_NV16</constant> with planes
+	<refname id="V4L2-PIX-FMT-NV16M"><constant>V4L2_PIX_FMT_NV16M</constant></refname>
+	<refname id="V4L2-PIX-FMT-NV61M"><constant>V4L2_PIX_FMT_NV61M</constant></refname>
+	<refpurpose>Variation of <constant>V4L2_PIX_FMT_NV16</constant> and <constant>V4L2_PIX_FMT_NV61</constant> with planes
 	  non contiguous in memory. </refpurpose>
       </refnamediv>
       <refsect1>
 	<title>Description</title>
 
-     <para>This is a multi-planar, two-plane version of the YUV 4:2:2 format.
+	<para>This is a multi-planar, two-plane version of the YUV 4:2:2 format.
 The three components are separated into two sub-images or planes.
 <constant>V4L2_PIX_FMT_NV16M</constant> differs from <constant>V4L2_PIX_FMT_NV16
 </constant> in that the two planes are non-contiguous in memory, i.e. the chroma
-plane do not necessarily immediately follows the luma plane.
+plane does not necessarily immediately follow the luma plane.
 The luminance data occupies the first plane. The Y plane has one byte per pixel.
-In the second plane there is a chrominance data with alternating chroma samples.
-The CbCr plane has the same width and height, in bytes, as the Y plane (and of the image).
+In the second plane there is chrominance data with alternating chroma samples.
+The CbCr plane is the same width and height, in bytes, as the Y plane.
 Each CbCr pair belongs to two pixels. For example,
 Cb<subscript>0</subscript>/Cr<subscript>0</subscript> belongs to
-Y<subscript>00</subscript>, Y'<subscript>01</subscript>. </para>
+Y'<subscript>00</subscript>, Y'<subscript>01</subscript>.
+<constant>V4L2_PIX_FMT_NV61M</constant> is the same as <constant>V4L2_PIX_FMT_NV16M</constant>
+except the Cb and Cr bytes are swapped, the CrCb plane starts with a Cr byte.</para>
 
-     <para><constant>V4L2_PIX_FMT_NV16M</constant> is intended to be
-used only in drivers and applications that support the multi-planar API,
-described in <xref linkend="planar-apis"/>. </para>
-
-	<para>If the Y plane has pad bytes after each row, then the
-CbCr plane has as many pad bytes after its rows.</para>
+	<para><constant>V4L2_PIX_FMT_NV16M</constant> and
+<constant>V4L2_PIX_FMT_NV61M</constant> are intended to be used only in drivers
+and applications that support the multi-planar API, described in
+<xref linkend="planar-apis"/>. </para>
 
 	<example>
-       <title><constant>V4L2_PIX_FMT_NV16M</constant> 4 &times; 4 pixel image</title>
+	  <title><constant>V4L2_PIX_FMT_NV16M</constant> 4 &times; 4 pixel image</title>
 
 	  <formalpara>
 	    <title>Byte Order.</title>
@@ -75,30 +76,30 @@ CbCr plane has as many pad bytes after its rows.</para>
 		      <entry>start1&nbsp;+&nbsp;0:</entry>
 		      <entry>Cb<subscript>00</subscript></entry>
 		      <entry>Cr<subscript>00</subscript></entry>
-		      <entry>Cb<subscript>01</subscript></entry>
-		      <entry>Cr<subscript>01</subscript></entry>
+		      <entry>Cb<subscript>02</subscript></entry>
+		      <entry>Cr<subscript>02</subscript></entry>
 		    </row>
 		    <row>
 		      <entry>start1&nbsp;+&nbsp;4:</entry>
 		      <entry>Cb<subscript>10</subscript></entry>
 		      <entry>Cr<subscript>10</subscript></entry>
-		      <entry>Cb<subscript>11</subscript></entry>
-		      <entry>Cr<subscript>11</subscript></entry>
+		      <entry>Cb<subscript>12</subscript></entry>
+		      <entry>Cr<subscript>12</subscript></entry>
 		    </row>
-              <row>
-                <entry>start1&nbsp;+&nbsp;8:</entry>
-                <entry>Cb<subscript>20</subscript></entry>
-                <entry>Cr<subscript>20</subscript></entry>
-                <entry>Cb<subscript>21</subscript></entry>
-                <entry>Cr<subscript>21</subscript></entry>
-              </row>
-              <row>
-                <entry>start1&nbsp;+&nbsp;12:</entry>
-                <entry>Cb<subscript>30</subscript></entry>
-                <entry>Cr<subscript>30</subscript></entry>
-                <entry>Cb<subscript>31</subscript></entry>
-                <entry>Cr<subscript>31</subscript></entry>
-              </row>
+		    <row>
+		      <entry>start1&nbsp;+&nbsp;8:</entry>
+		      <entry>Cb<subscript>20</subscript></entry>
+		      <entry>Cr<subscript>20</subscript></entry>
+		      <entry>Cb<subscript>22</subscript></entry>
+		      <entry>Cr<subscript>22</subscript></entry>
+		    </row>
+		    <row>
+		      <entry>start1&nbsp;+&nbsp;12:</entry>
+		      <entry>Cb<subscript>30</subscript></entry>
+		      <entry>Cr<subscript>30</subscript></entry>
+		      <entry>Cb<subscript>32</subscript></entry>
+		      <entry>Cr<subscript>32</subscript></entry>
+		    </row>
 		  </tbody>
 		</tgroup>
 		</informaltable>
@@ -131,11 +132,14 @@ CbCr plane has as many pad bytes after its rows.</para>
 		      <entry>Y</entry><entry></entry><entry>Y</entry><entry></entry>
 		      <entry>Y</entry><entry></entry><entry>Y</entry>
 		    </row>
-              <row>
-                <entry></entry>
-                <entry></entry><entry>C</entry><entry></entry><entry></entry>
-                <entry></entry><entry>C</entry><entry></entry>
-              </row>
+		    <row>
+		      <entry></entry>
+		      <entry></entry><entry>C</entry><entry></entry><entry></entry>
+		      <entry></entry><entry>C</entry><entry></entry>
+		    </row>
+		    <row>
+		      <entry></entry>
+		    </row>
 		    <row>
 		      <entry>2</entry>
 		      <entry>Y</entry><entry></entry><entry>Y</entry><entry></entry>
@@ -151,11 +155,11 @@ CbCr plane has as many pad bytes after its rows.</para>
 		      <entry>Y</entry><entry></entry><entry>Y</entry><entry></entry>
 		      <entry>Y</entry><entry></entry><entry>Y</entry>
 		    </row>
-              <row>
-                <entry></entry>
-                <entry></entry><entry>C</entry><entry></entry><entry></entry>
-                <entry></entry><entry>C</entry><entry></entry>
-              </row>
+		    <row>
+		      <entry></entry>
+		      <entry></entry><entry>C</entry><entry></entry><entry></entry>
+		      <entry></entry><entry>C</entry><entry></entry>
+		    </row>
 		  </tbody>
 		</tgroup>
 		</informaltable>
