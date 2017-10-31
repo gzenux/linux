@@ -23,21 +23,14 @@
 #include <linux/module.h>
 #include <linux/err.h>
 #include <linux/mmc/host.h>
+#include <linux/mmc/slot-gpio.h>
 #include <linux/stm/mmc.h>
 #include <linux/stm/platform.h>
 #include <linux/of_gpio.h>
 
 #include "sdhci-pltfm.h"
 
-static irqreturn_t sdhci_stm_carddetect_irq(int irq, void *data)
-{
-	struct sdhci_host *host = data;
-
-	tasklet_schedule(&host->card_tasklet);
-	return IRQ_HANDLED;
-}
-
-static int sdhci_stm_8bit_width(struct sdhci_host *host, int width)
+static void sdhci_stm_8bit_width(struct sdhci_host *host, int width)
 {
 	u8 ctrl;
 
@@ -58,8 +51,6 @@ static int sdhci_stm_8bit_width(struct sdhci_host *host, int width)
 	}
 
 	sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
-
-	return 0;
 }
 
 static unsigned int sdhci_stm_get_max_clk(struct sdhci_host *host)
@@ -123,7 +114,7 @@ static void sdhci_stm_vsense(struct sdhci_host *host, int voltage)
 
 static struct sdhci_ops sdhci_stm_ops = {
 	.get_max_clock = sdhci_stm_get_max_clk,
-	.platform_bus_width = sdhci_stm_8bit_width,
+	.set_bus_width = sdhci_stm_8bit_width,
 	.read_l = sdhci_stm_readl,
 	.platform_tuning = sdhci_stm_hs200_tuning,
 	.platform_vsense = sdhci_stm_vsense,
@@ -159,7 +150,7 @@ static void stm_sdhci_release_conf(struct platform_device *pdev)
 	pdata->custom_data = NULL;
 }
 
-static void __devinit *stm_sdhci_dt_get_pdata(struct platform_device *pdev)
+static void *stm_sdhci_dt_get_pdata(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct stm_mmc_platform_data *priv_data;
@@ -190,7 +181,7 @@ static void __devinit *stm_sdhci_dt_get_pdata(struct platform_device *pdev)
 	return priv_data;
 }
 #else
-static void __devinit *stm_sdhci_dt_get_pdata(struct platform_device *pdev)
+static void *stm_sdhci_dt_get_pdata(struct platform_device *pdev)
 {
 	return NULL;
 }
@@ -224,7 +215,7 @@ static void stm_sdhci_release_conf(struct platform_device *pdev)
 }
 #endif
 
-static int __devinit sdhci_stm_probe(struct platform_device *pdev)
+static int sdhci_stm_probe(struct platform_device *pdev)
 {
 	struct sdhci_host *host;
 	struct stm_mmc_platform_data *pdata;
@@ -249,7 +240,7 @@ static int __devinit sdhci_stm_probe(struct platform_device *pdev)
 
 	stm_sdhci_init_conf(pdev);
 
-	host = sdhci_pltfm_init(pdev, &sdhci_stm_pdata);
+	host = sdhci_pltfm_init(pdev, &sdhci_stm_pdata, 0);
 	if (IS_ERR(host))
 		return PTR_ERR(host);
 
@@ -280,10 +271,7 @@ static int __devinit sdhci_stm_probe(struct platform_device *pdev)
 	}
 
 	if (gpio_is_valid(pdata->gpio_cd)) {
-		ret = request_irq(gpio_to_irq(pdata->gpio_cd),
-				  sdhci_stm_carddetect_irq,
-				  IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
-				  mmc_hostname(host->mmc), host);
+		ret = mmc_gpio_request_cd(host->mmc, pdata->gpio_cd, 0);
 		if (ret)
 			dev_warn(&pdev->dev,
 				 "card detect irq request failed %d\n", ret);
@@ -321,7 +309,7 @@ err_out:
 	return ret;
 }
 
-static int __devexit sdhci_stm_remove(struct platform_device *pdev)
+static int sdhci_stm_remove(struct platform_device *pdev)
 {
 	struct sdhci_host *host = platform_get_drvdata(pdev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -421,7 +409,7 @@ static struct platform_driver sdhci_stm_driver = {
 			.of_match_table = of_match_ptr(stm_sdhci_match),
 		   },
 	.probe = sdhci_stm_probe,
-	.remove = __devexit_p(sdhci_stm_remove),
+	.remove = sdhci_stm_remove,
 };
 
 static int __init sdhci_stm_init(void)

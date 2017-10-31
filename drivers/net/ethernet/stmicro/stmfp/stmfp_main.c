@@ -2005,7 +2005,7 @@ static int fpif_init(struct fpif_grp *fpgrp)
 
 #ifdef CONFIG_FP_FPGA
 #include <linux/pci.h>
-static int __devinit fpif_probe(struct pci_dev *pdev,
+static int fpif_probe(struct pci_dev *pdev,
 				const struct pci_device_id *ent);
 static void fpif_remove(struct pci_dev *pdev);
 static void fpga_platinit(void *p);
@@ -2069,7 +2069,7 @@ static void fpga_platinit(void *p)
 	fpif_wait_till_done(priv);
 }
 
-static int __devinit fpif_probe(struct pci_dev *pdev,
+static int fpif_probe(struct pci_dev *pdev,
 				const struct pci_device_id *ent)
 {
 	int err;
@@ -2213,7 +2213,7 @@ static void __exit fpif_exit_module(void)
 }
 
 #else
-static int __devinit fpif_probe(struct platform_device *pdev)
+static int fpif_probe(struct platform_device *pdev)
 {
 	int err;
 	void __iomem *base;

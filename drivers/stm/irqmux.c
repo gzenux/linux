@@ -149,7 +149,7 @@ static void *irq_mux_get_pdata(struct platform_device *pdev)
 
 	return data;
 }
-static int __devinit irq_mux_driver_probe(struct platform_device *pdev)
+static int irq_mux_driver_probe(struct platform_device *pdev)
 {
 	struct stm_plat_irq_mux_data *pdata;
 	struct irq_mux_drv_data *drv_data;

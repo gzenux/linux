@@ -137,9 +137,10 @@ int ilc2irq(unsigned int evtcode)
  * The interrupt demux function. Check if this was an ILC interrupt, and
  * if so which device generated the interrupt.
  */
-void ilc_irq_demux(unsigned int irq, struct irq_desc *desc)
+void ilc_irq_demux(struct irq_desc *desc)
 {
-	struct ilc *ilc = irq_get_handler_data(irq);
+	struct ilc *ilc = irq_desc_get_handler_data(desc);
+	unsigned int irq = irq_desc_get_irq(desc);
 	unsigned int priority = 7;
 	int handled = 0;
 	int idx;
@@ -159,7 +160,7 @@ void ilc_irq_demux(unsigned int irq, struct irq_desc *desc)
 
 		input = (idx * 32) + ffs(status) - 1;
 		desc = irq_to_desc(input + ilc->first_irq);
-		desc->handle_irq(ilc->first_irq + input, desc);
+		desc->handle_irq(desc);
 		handled = 1;
 		ILC_CLR_STATUS(ilc->base, input);
 	}
@@ -350,7 +351,7 @@ static struct irq_chip ilc_chip = {
 	.irq_set_wake	= set_wake_ilc_irq,
 };
 
-static void __devinit ilc_demux_init(struct platform_device *pdev)
+static void ilc_demux_init(struct platform_device *pdev)
 {
 	struct ilc *ilc = platform_get_drvdata(pdev);
 	int irq;
@@ -378,7 +379,7 @@ static void __devinit ilc_demux_init(struct platform_device *pdev)
 	return;
 }
 
-static int __devinit ilc_probe(struct platform_device *pdev)
+static int ilc_probe(struct platform_device *pdev)
 {
 	struct stm_plat_ilc3_data *pdata = pdev->dev.platform_data;
 	struct resource *memory;

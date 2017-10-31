@@ -1193,7 +1193,7 @@ static int ir_stm_probe(struct platform_device *pdev)
 		ret = ir_stm_hardware_init(ir_dev);
 
 		rdev->driver_type = RC_DRIVER_IR_RAW;
-		rdev->allowed_protos = RC_TYPE_ALL;
+		rdev->allowed_protocols = RC_BIT_ALL;
 		rdev->priv = ir_dev;
 		rdev->open = stm_ir_open;
 		rdev->close = stm_ir_close;
@@ -1222,7 +1222,7 @@ static int ir_stm_probe(struct platform_device *pdev)
 	}
 	platform_set_drvdata(pdev, ir_dev);
 
-	if (devm_request_irq(dev, irb_irq, ir_stm_interrupt, IRQF_DISABLED,
+	if (devm_request_irq(dev, irb_irq, ir_stm_interrupt, 0x0,
 			     IR_STM_NAME, (void *)ir_dev) < 0) {
 		pr_err(IR_STM_NAME ": IRQ %d register failed\n", irb_irq);
 		ret = -EIO;
@@ -1233,7 +1233,7 @@ static int ir_stm_probe(struct platform_device *pdev)
 	irb_irq_wup = platform_get_irq(pdev, 1);
 	if (irb_irq_wup >= 0) {
 		if (devm_request_irq
-		    (dev, irb_irq_wup, ir_stm_interrupt, IRQF_DISABLED,
+		    (dev, irb_irq_wup, ir_stm_interrupt, 0x0,
 		     IR_STM_NAME, (void *)ir_dev) < 0) {
 			pr_err(IR_STM_NAME
 			       ": wakeup IRQ %d register failed\n",

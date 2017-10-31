@@ -44,7 +44,7 @@ struct audio_glue {
  * Driver functions.
  */
 
-static int __devinit audio_glue_probe(struct platform_device *pdev)
+static int audio_glue_probe(struct platform_device *pdev)
 {
 	struct audio_glue *glue;
 	int result;
@@ -84,7 +84,7 @@ static int __devinit audio_glue_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int __devexit audio_glue_remove(struct platform_device *pdev)
+static int audio_glue_remove(struct platform_device *pdev)
 {
 	struct audio_glue *glue = dev_get_drvdata(&pdev->dev);
 

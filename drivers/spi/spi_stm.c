@@ -470,7 +470,7 @@ static int spi_stm_probe(struct platform_device *pdev)
 	spi_stm->r_irq = *res;
 
 	if (request_irq(res->start, spi_stm_irq,
-			IRQF_DISABLED, dev_name(&pdev->dev), spi_stm)) {
+			0x0, dev_name(&pdev->dev), spi_stm)) {
 		dev_err(&pdev->dev, "irq request failed\n");
 		status = -EBUSY;
 		goto err3;

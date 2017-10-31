@@ -11,6 +11,7 @@
 
 #include <linux/init.h>
 #include <linux/clk.h>
+#include <linux/clkdev.h>
 
 int __init stid127_plat_clk_alias_init(void)
 {

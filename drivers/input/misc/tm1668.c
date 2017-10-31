@@ -248,7 +248,7 @@ static ssize_t tm1668_brightness_store(struct device *dev,
 	struct tm1668_chip *chip = dev_get_drvdata(dev);
 	unsigned long value;
 
-	result = strict_strtoul(buf, 10, &value);
+	result = kstrtoul(buf, 10, &value);
 	if (result == 0) {
 		spin_lock(&chip->lock);
 		tm1668_set_brightness(chip, value);

@@ -8,6 +8,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/clkdev.h>
 #include <linux/stm/clk.h>
 
 int __init stx7108_plat_clk_alias_init(void)

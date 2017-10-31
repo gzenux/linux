@@ -169,14 +169,14 @@ static void *stm_hcd_dt_get_pdata(struct platform_device *pdev)
 }
 #endif
 
-static int __devinit stm_usb_probe(struct platform_device *pdev)
+static int stm_usb_probe(struct platform_device *pdev)
 {
 	struct stm_plat_usb_data *plat_data;
 	struct drv_usb_data *dr_data;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
 	int i, id;
-	static __devinitdata char *usb_clks_n[] = {
+	static char *usb_clks_n[] = {
 		"usb_48_clk",
 		"usb_ic_clk",
 		"usb_phy_clk"

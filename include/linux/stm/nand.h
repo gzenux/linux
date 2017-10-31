@@ -10,6 +10,13 @@
 #define __LINUX_STM_NAND_H
 
 /*
+ * Reserve deprecated legacy macro defined in include/mtd/nand.h
+ * The original legacy macro name is prefixed with 'STM_'
+ */
+#define STM_NAND_MAX_OOBSIZE	576
+#define STM_NAND_MAX_PAGESIZE	8192
+
+/*
  * Legacy specification for NAND timing parameters.  Deprecated in favour of
  * include/mtd/nand.h:nand_timing_spec.
  */

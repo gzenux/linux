@@ -873,7 +873,7 @@ static void *stm_emi_dt_get_pdata(struct platform_device *pdev)
 }
 #endif
 
-static int __devinit stm_nand_emi_probe(struct platform_device *pdev)
+static int stm_nand_emi_probe(struct platform_device *pdev)
 {
 	struct stm_plat_nand_emi_data *pdata ;
 	struct stm_nand_emi_group *group;
@@ -939,7 +939,7 @@ static int __devinit stm_nand_emi_probe(struct platform_device *pdev)
 /*
  * Remove a NAND device.
  */
-static int __devexit stm_nand_emi_remove(struct platform_device *pdev)
+static int stm_nand_emi_remove(struct platform_device *pdev)
 {
 	struct stm_nand_emi_group *group = platform_get_drvdata(pdev);
 	int n;

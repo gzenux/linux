@@ -794,7 +794,7 @@ static int __init stm_lpm_probe(struct platform_device *pdev)
 		goto free_and_exit;
 	}
 	if (devm_request_irq(&pdev->dev, res->start, lpm_isr,
-			IRQF_DISABLED, "stlmp", (void *)lpm_drv) < 0) {
+			0x0, "stlmp", (void *)lpm_drv) < 0) {
 		pr_err("%s: Request stm lpm irq not done\n", __func__);
 		err = -ENODEV;
 		goto free_and_exit;

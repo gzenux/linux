@@ -969,7 +969,7 @@ void add_random_data(const char* rdata, int count)
 	mix_pool_bytes(&input_pool, (const __u32 *)rdata, count);
 	credit_entropy_bits(&input_pool, count*8);
 
-	if(input_pool.entropy_count >= random_read_wakeup_thresh)
+	if(input_pool.entropy_count >= random_read_wakeup_bits)
 		wake_up_interruptible(&random_read_wait);
 }
 EXPORT_SYMBOL(add_random_data);

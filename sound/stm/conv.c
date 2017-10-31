@@ -1085,7 +1085,7 @@ static void snd_stm_conv_info(struct snd_info_entry *entry,
  */
 
 
-int __init snd_stm_conv_init(void)
+int snd_stm_conv_init(void)
 {
 	/* Register converters information file in ALSA's procfs */
 

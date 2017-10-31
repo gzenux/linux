@@ -736,7 +736,7 @@ static void afm_init_controller(struct stm_nand_afm_controller *afm)
 }
 
 /* Initialise the AFM NAND controller */
-static struct stm_nand_afm_controller * __devinit
+static struct stm_nand_afm_controller *
 afm_init_resources(struct platform_device *pdev)
 {
 	struct stm_plat_nand_flex_data *pdata = pdev->dev.platform_data;
@@ -818,7 +818,7 @@ afm_init_resources(struct platform_device *pdev)
 		err = afm->irq;
 		goto err4;
 	}
-	err = request_irq(afm->irq, afm_irq_handler, IRQF_DISABLED,
+	err = request_irq(afm->irq, afm_irq_handler, 0x0,
 			  dev_name(&pdev->dev), afm);
 	if (err) {
 		dev_err(&pdev->dev, "irq request failed\n");
@@ -2892,7 +2892,7 @@ static int pbl_boot_boundary(struct mtd_info *mtd, uint32_t *boundary)
 #endif
 
 
-static struct stm_nand_afm_device * __devinit
+static struct stm_nand_afm_device *
 afm_init_bank(struct stm_nand_afm_controller *afm, int bank_nr,
 		struct stm_nand_bank_data *bank, struct device *dev)
 {
@@ -2936,7 +2936,6 @@ afm_init_bank(struct stm_nand_afm_controller *afm, int bank_nr,
 
 	data->chip.options = bank->options;
 	data->chip.bbt_options = bank->bbt_options;
-	data->chip.options |= NAND_NO_AUTOINCR;
 
 	afm_set_defaults(&data->chip);
 
@@ -3096,7 +3095,7 @@ static void *stm_afm_dt_get_pdata(struct platform_device *pdev)
 /*
  * stm-nand-afm device probe
  */
-static int __devinit stm_afm_probe(struct platform_device *pdev)
+static int stm_afm_probe(struct platform_device *pdev)
 {
 	struct stm_plat_nand_flex_data *pdata;
 	struct stm_nand_bank_data *bank;
@@ -3147,7 +3146,7 @@ static int __devinit stm_afm_probe(struct platform_device *pdev)
 }
 
 
-static int __devexit stm_afm_remove(struct platform_device *pdev)
+static int stm_afm_remove(struct platform_device *pdev)
 {
 	struct stm_plat_nand_flex_data *pdata = pdev->dev.platform_data;
 	struct stm_nand_afm_controller *afm = platform_get_drvdata(pdev);

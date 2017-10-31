@@ -155,8 +155,7 @@ static int __init nwhw_config_setup(char *str)
 			else if (!strncmp(p, "speed:", 6)) {
 				int speed;
 
-				if (!(strict_strtoul(p + 6, 0,
-						     (unsigned long *)&speed)))
+				if (!(kstrtoul(p + 6, 0, (unsigned long *)&speed)))
 					if ((speed == SPEED_10) ||
 					    (speed == SPEED_100) ||
 					    (speed == SPEED_1000) ||

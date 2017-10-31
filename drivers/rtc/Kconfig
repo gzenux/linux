@@ -451,7 +451,8 @@ config RTC_DRV_PCF8583
 
 config  RTC_DRV_M41ST85Y
 	tristate "M41ST85Y (EXPERIMENTAL)"
-	depends on RTC_CLASS && CPU_SUBTYPE_ST40 && (I2C_STM || I2C_ST40_PIO) && EXPERIMENTAL
+	depends on RTC_CLASS && CPU_SUBTYPE_ST40 && (I2C_STM || I2C_ST40_PIO)
+	default n
 	help
 	  Enable this entry to support the external M41ST85Y Real Time Clock
 	  device series roundly fitted on some I2C serial bus interface seeng that

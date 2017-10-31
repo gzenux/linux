@@ -574,8 +574,8 @@ config STM_NAND_EMI_FDMA
 	  devices.
 
 config STM_NAND_EMI_CACHED
-	depends on EXPERIMENTAL
 	bool "Cached Transfers [EXPERIMENTAL]"
+	default n
 	help
 	  Perform page transers via the cache-line.  Reduces the impact of STBus
 	  latencies at the expense of an increased IRQ latency.
@@ -590,11 +590,11 @@ config MTD_NAND_STM_FLEX
 	  enabled.
 
 config STM_NAND_FLEX_CACHED
-       depends on EXPERIMENTAL
-       depends on MTD_NAND_STM_FLEX
-       depends on CPU_SH4
-       bool "Reads via cacheline"
-       help
+	depends on MTD_NAND_STM_FLEX
+	depends on CPU_SH4
+	bool "Reads via cacheline [EXPERIMENTAL]"
+	default n
+	help
 	  Perform read operations via a cacheline.  Reduces the impact of STBus
 	  latencies at the expense of an increased IRQ latency.
 
@@ -617,10 +617,10 @@ config MTD_NAND_STM_AFM
 	  Enables the STMicroelectronics NAND Controller operating in AFM mode.
 
 config STM_NAND_AFM_CACHED
-	depends on EXPERIMENTAL
 	depends on MTD_NAND_STM_AFM
 	depends on CPU_SH4
 	bool "Cached Transfers [EXPERIMENTAL]"
+	default n
 	help
 	  Perform page transers via the cache-line.  Reduces the impact of STBus
 	  latencies at the expence of an incresed IRQ latency.
@@ -642,7 +642,7 @@ config STM_NAND_AFM_BOOTPARTITION
 config STM_NAND_AFM_PBLBOOTBOUNDARY
 	bool "Extract boot-mode ECC boundary from the PBL"
 	depends on STM_NAND_AFM_BOOTMODESUPPORT
-	default false
+	default n
 	help
 	  Update the boot-mode ECC boundary from the PBL and apply to the
 	  specified NAND boot partition.

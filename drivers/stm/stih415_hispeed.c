@@ -825,7 +825,7 @@ void __init stih415_configure_ethernet(int port,
 			sysconf_write(sc, 1);
 		}
 	} break;
-	case PHY_INTERFACE_MODE_REV_MII:
+	case PHY_INTERFACE_MODE_REVMII:
 		pad_config = &stih415_ethernet_reverse_mii_pad_configs[port];
 		if (config->ext_clk)
 			stm_pad_set_pio_ignored(pad_config, "PHYCLK");

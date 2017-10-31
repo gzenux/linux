@@ -84,33 +84,4 @@ static inline bool of_phy_is_fixed_link(struct device_node *np)
 #endif
 
 
-#else /* CONFIG_OF */
-int of_mdiobus_register(struct mii_bus *mdio, struct device_node *np)
-{
-	return -ENOSYS;
-}
-
-struct phy_device *of_phy_find_device(struct device_node *phy_np)
-{
-	return NULL;
-}
-
-struct phy_device *of_phy_connect(struct net_device *dev,
-					 struct device_node *phy_np,
-					 void (*hndlr)(struct net_device *),
-					 u32 flags, phy_interface_t iface)
-{
-	return NULL;
-}
-
-struct phy_device *of_phy_connect_fixed_link(struct net_device *dev,
-					 void (*hndlr)(struct net_device *),
-					 phy_interface_t iface)
-{
-	return NULL;
-}
-
-
-#endif /* CONFIG_OF */
-
 #endif /* __LINUX_OF_MDIO_H */

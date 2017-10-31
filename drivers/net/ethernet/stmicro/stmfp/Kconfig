@@ -19,7 +19,7 @@ config STM_FASTPATH
 
 config FP_FPGA
 	tristate "STM FastPath for FPGA Platform(EXPERIMENTAL)"
-	depends on PCI && EXPERIMENTAL && STM_FASTPATH
+	depends on PCI && STM_FASTPATH
 	default n
 	---help---
 	  Support for STM FastPath FPGA Platform.

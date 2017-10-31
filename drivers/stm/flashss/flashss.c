@@ -361,7 +361,7 @@ static void flashss_exit_debug_fs(void)
  * At this stage, the flashSS can only manage TOP configuration registers
  * and eMMC core / phy. Also it inits the debugFS if supported.
  */
-static int __devinit flashss_driver_probe(struct platform_device *pdev)
+static int flashss_driver_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct device *dev = &pdev->dev;
@@ -375,8 +375,8 @@ static int __devinit flashss_driver_probe(struct platform_device *pdev)
 		return -ENXIO;
 	}
 
-	flashss_config = devm_request_and_ioremap(dev, res);
-	if (!flashss_config) {
+	flashss_config = devm_ioremap_resource(dev, res);
+	if (IS_ERR(flashss_config)) {
 		dev_err(dev, "failed to remap mem [0x%08x-0x%08x]",
 			res->start, res->end);
 		return -ENOMEM;

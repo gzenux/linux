@@ -185,7 +185,7 @@ static void __stm_gpio_irq_handler(const struct stm_gpio_port *port)
 			}
 			continue;
 		} else {
-			pin_irq_desc->handle_irq(pin_irq, pin_irq_desc);
+			pin_irq_desc->handle_irq(pin_irq_desc);
 
 			/* If our handler has disabled interrupts,
 			 * then don't re-enable them */
@@ -205,20 +205,20 @@ static void __stm_gpio_irq_handler(const struct stm_gpio_port *port)
 	pr_debug("exiting\n");
 }
 
-static void stm_gpio_irq_handler(unsigned int irq, struct irq_desc *desc)
+static void stm_gpio_irq_handler(struct irq_desc *desc)
 {
-	struct stm_gpio_port *port = irq_get_handler_data(irq);
-	struct irq_chip *chip = irq_get_chip(irq);
+	struct stm_gpio_port *port = irq_desc_get_handler_data(desc);
+	struct irq_chip *chip = irq_desc_get_chip(desc);
 
 	chained_irq_enter(chip, desc);
 	__stm_gpio_irq_handler(port);
 	chained_irq_exit(chip, desc);
 }
 
-static void stm_gpio_irqmux_handler(unsigned int irq, struct irq_desc *desc)
+static void stm_gpio_irqmux_handler(struct irq_desc *desc)
 {
-	struct irq_chip *chip = irq_get_chip(irq);
-	struct stm_gpio_irqmux *irqmux = irq_get_handler_data(irq);
+	struct irq_chip *chip = irq_desc_get_chip(desc);
+	struct stm_gpio_irqmux *irqmux = irq_desc_get_handler_data(desc);
 	unsigned long status;
 	int bit;
 
@@ -843,7 +843,7 @@ static int stm_gpio_get_port_num(struct platform_device *pdev)
 
 /*** PIO bank platform device driver ***/
 
-static int __devinit stm_gpio_probe(struct platform_device *pdev)
+static int stm_gpio_probe(struct platform_device *pdev)
 {
 	int port_no;
 	struct stm_gpio_port *port;
@@ -923,7 +923,7 @@ static void *stm_gpio_irqmux_get_pdata(struct platform_device *pdev)
 
 /*** PIO IRQ status register platform device driver ***/
 
-static int __devinit stm_gpio_irqmux_probe(struct platform_device *pdev)
+static int stm_gpio_irqmux_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct stm_plat_pio_irqmux_data *plat_data;

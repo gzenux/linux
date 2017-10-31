@@ -444,12 +444,10 @@ static int __init clk_proc_init(void)
 {
 	struct proc_dir_entry *p;
 
-	p = create_proc_entry("clocks", S_IRUGO, NULL);
+	p = proc_create("clocks", S_IRUGO, NULL, &clk_proc_ops);
 
 	if (unlikely(!p))
 		return -EINVAL;
-
-	p->proc_fops = &clk_proc_ops;
 
 	return 0;
 }

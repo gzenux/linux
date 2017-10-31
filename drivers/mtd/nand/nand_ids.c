@@ -372,12 +372,11 @@ static int nand_decode_id_2(struct mtd_info *mtd,
 
 	/* Get chip options from table */
 	chip->options |= type->options;
-	chip->options |= NAND_NO_AUTOINCR;
-	if (mtd->writesize > 512)
-		chip->options |= NAND_NO_READRDY;
+	if (mtd->writesize <= 512)
+		chip->options |= NAND_NEED_READRDY;
 
 	/* Assume some defaults */
-	chip->cellinfo = 0;
+	chip->bits_per_cell = 0;
 	chip->planes_per_chip = 1;
 	chip->planes_per_chip = 1;
 	chip->luns_per_chip = 1;
@@ -461,9 +460,8 @@ static int nand_decode_id_ext(struct mtd_info *mtd,
 	}
 
 	/* Some default 'chip' options */
-	chip->options |= NAND_NO_AUTOINCR;
-	if (mtd->writesize > 512)
-		chip->options |= NAND_NO_READRDY;
+	if (mtd->writesize <= 512)
+		chip->options |= NAND_NEED_READRDY;
 
 	if (id[0] == NAND_MFR_SAMSUNG && mtd->writesize > 512)
 		chip->options |= NAND_SAMSUNG_LP_OPTIONS;
@@ -479,8 +477,8 @@ static int nand_decode_id_ext(struct mtd_info *mtd,
 		 * HY27UF{08,16}2G2M
 		 */
 		chip->luns_per_chip = 1;
-		chip->cellinfo = 0;
-		chip->options |= (NAND_CACHEPRG | NAND_COPYBACK);
+		chip->bits_per_cell = 0;
+		chip->options |= NAND_CACHEPRG;
 	} else if (id_len == 4 && id[0] == NAND_MFR_MICRON &&
 		   (id[1] == 0xDA || id[1] == 0xCA || id[1] == 0xDC ||
 		    id[1] == 0xCC || id[1] == 0xAA || id[1] == 0xBA)) {
@@ -490,14 +488,14 @@ static int nand_decode_id_ext(struct mtd_info *mtd,
 		 * MT29F4G08BAC
 		 */
 		chip->luns_per_chip = 1;
-		chip->cellinfo = 0;
-		chip->options |= (NAND_CACHEPRG | NAND_COPYBACK);
+		chip->bits_per_cell = 0;
+		chip->options |= NAND_CACHEPRG;
 	} else if (id_len == 4 && id[0] == NAND_MFR_SAMSUNG &&
 		   (id[1] == 0xF1 || id[1] == 0xA1)) {
 		/* K9F1G08{U,Q}A */
 		chip->luns_per_chip = 1;
-		chip->cellinfo = 0;
-		chip->options |= (NAND_CACHEPRG | NAND_COPYBACK);
+		chip->bits_per_cell = 0;
+		chip->options |= NAND_CACHEPRG;
 	} else {
 		/*   - LUNs: ID2[1:0] */
 		data = id[2] & 0x3;
@@ -507,8 +505,8 @@ static int nand_decode_id_ext(struct mtd_info *mtd,
 		if ((id[2] >> 7) & 0x1)
 			chip->options |= NAND_CACHEPRG;
 
-		/*   - Copy to 'cellinfo' */
-		chip->cellinfo = id[2];
+		/*   - Copy to 'bits_per_cell' */
+		chip->bits_per_cell = id[2];
 	}
 
 	return 0;
@@ -607,9 +605,8 @@ static int nand_decode_id_6(struct mtd_info *mtd,
 	}
 
 	/* Some default 'chip' options */
-	chip->options |= NAND_NO_AUTOINCR;
-	if (mtd->writesize > 512)
-		chip->options |= NAND_NO_READRDY;
+	if (mtd->writesize <= 512)
+		chip->options |= NAND_NEED_READRDY;
 
 	if (id[0] == NAND_MFR_SAMSUNG && mtd->writesize > 512)
 		chip->options |= NAND_SAMSUNG_LP_OPTIONS;
@@ -623,8 +620,8 @@ static int nand_decode_id_6(struct mtd_info *mtd,
 	if ((id[2] >> 7) & 0x1)
 		chip->options |= NAND_CACHEPRG;
 
-	/*   - Copy to 'cellinfo' */
-	chip->cellinfo = id[2];
+	/*   - Copy to 'bits_per_cell' */
+	chip->bits_per_cell = id[2];
 
 	/* Bus Width, from table */
 	chip->options |= (type->options & NAND_BUSWIDTH_16);
@@ -637,8 +634,6 @@ static int nand_decode_id_6(struct mtd_info *mtd,
  */
 void nand_derive_bbm(struct mtd_info *mtd, struct nand_chip *chip, uint8_t *id)
 {
-	int bits_per_cell = ((chip->cellinfo >> 2) & 0x3) + 1;
-
 	/*
 	 * Some special cases first...
 	 */
@@ -652,7 +647,7 @@ void nand_derive_bbm(struct mtd_info *mtd, struct nand_chip *chip, uint8_t *id)
 	}
 
 	/* Hynix MLC VLP: last and last-2 pages, byte 0 */
-	if (id[0] == NAND_MFR_HYNIX && bits_per_cell == 2 &&
+	if (id[0] == NAND_MFR_HYNIX && chip->bits_per_cell == 2 &&
 	    mtd->writesize == 4096) {
 		chip->bbm = (NAND_BBM_PAGE_LAST |
 			     NAND_BBM_PAGE_LMIN2 |
@@ -674,7 +669,7 @@ void nand_derive_bbm(struct mtd_info *mtd, struct nand_chip *chip, uint8_t *id)
 	/* Samsung and Hynix MLC NAND: last page, byte 0; and 1st page for 8KiB
 	 * page devices */
 	if ((id[0] == NAND_MFR_SAMSUNG || id[0] == NAND_MFR_HYNIX) &&
-	    bits_per_cell == 2) {
+	    chip->bits_per_cell == 2) {
 		chip->bbm = NAND_BBM_PAGE_LAST | NAND_BBM_BYTE_OOB_0;
 		if (mtd->writesize == 8192)
 			chip->bbm |= NAND_BBM_PAGE_0;
@@ -697,7 +692,7 @@ void nand_derive_bbm(struct mtd_info *mtd, struct nand_chip *chip, uint8_t *id)
 	chip->bbm = NAND_BBM_PAGE_0;
 	/* Also 2nd page for SLC Samsung, Hynix, Macronix, Toshiba (LP),
 	 * AMD/Spansion */
-	if (bits_per_cell == 1 &&
+	if (chip->bits_per_cell == 1 &&
 	    (id[0] == NAND_MFR_SAMSUNG ||
 	     id[0] == NAND_MFR_HYNIX ||
 	     id[0] == NAND_MFR_AMD ||
@@ -713,9 +708,6 @@ void nand_derive_bbm(struct mtd_info *mtd, struct nand_chip *chip, uint8_t *id)
 
  set_bbt_options:
 	/* Set BBT chip->options, for backwards compatibility */
-	if (chip->bbm & NAND_BBM_PAGE_ALL)
-		chip->bbt_options |= NAND_BBT_SCANALLPAGES;
-
 	if (chip->bbm & NAND_BBM_PAGE_1)
 		chip->bbt_options |= NAND_BBT_SCAN2NDPAGE;
 

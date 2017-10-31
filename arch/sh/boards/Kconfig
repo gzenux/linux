@@ -529,8 +529,6 @@ source "arch/sh/boards/mach-hdk7108/Kconfig"
 source "arch/sh/boards/mach-adi7108/Kconfig"
 source "arch/sh/boards/mach-b2000/Kconfig"
 
-endmenu
-
 if SH_MAGIC_PANEL_R2
 
 menu "Magic Panel R2 options"

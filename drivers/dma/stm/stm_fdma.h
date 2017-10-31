@@ -224,7 +224,6 @@ void stm_fdma_desc_put(struct stm_fdma_desc *fdesc);
 void stm_fdma_desc_chain(struct stm_fdma_desc **head,
 		struct stm_fdma_desc **prev, struct stm_fdma_desc *fdesc);
 void stm_fdma_desc_start(struct stm_fdma_chan *fchan);
-void stm_fdma_desc_unmap_buffers(struct stm_fdma_desc *fdesc);
 void stm_fdma_desc_complete(unsigned long data);
 
 int stm_fdma_register_dreq_router(struct stm_fdma_dreq_router *router);

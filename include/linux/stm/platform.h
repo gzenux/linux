@@ -700,7 +700,7 @@ struct stm_plat_irq_mux_data {
  * also when PM stuff is invoked.
  */
 #define build_pad_claim(name, driver_plat_data)				\
-static inline int name(struct platform_device *pdev)			\
+static inline int name(struct platform_device *pdev, void *bsp_priv)			\
 {									\
 	int ret = 0;							\
 	struct driver_plat_data *plat_dat = pdev->dev.platform_data;	\
@@ -714,7 +714,7 @@ static inline int name(struct platform_device *pdev)			\
 }
 
 #define build_pad_release(name, driver_plat_data)			\
-static inline void name(struct platform_device *pdev)			\
+static inline void name(struct platform_device *pdev, void *bsp_priv)			\
 {									\
 	struct driver_plat_data *plat_dat = pdev->dev.platform_data;	\
 	if (!plat_dat->custom_data)					\

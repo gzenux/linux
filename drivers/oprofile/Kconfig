@@ -2,6 +2,7 @@ menu Profilers
 
 config PROFILING
 	bool "Profiling support (EXPERIMENTAL)"
+	default n
 	help
 	  Say Y here to enable the extended profiling support mechanisms used
 	  by profilers such as OProfile.

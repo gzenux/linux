@@ -368,7 +368,7 @@ void __init stxh205_configure_ethernet(struct stxh205_ethernet_config *config)
 			pad_config->sysconfs[4].value = 1;
 		}
 		break;
-	case PHY_INTERFACE_MODE_REV_MII:
+	case PHY_INTERFACE_MODE_REVMII:
 		pad_config = &stxh205_ethernet_reverse_mii_pad_config;
 		if (config->ext_clk)
 			stm_pad_set_pio_ignored(pad_config, "PHYCLK");

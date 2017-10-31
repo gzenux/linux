@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/clk.h>
 #include <linux/semaphore.h>
 #include <linux/platform_device.h>
