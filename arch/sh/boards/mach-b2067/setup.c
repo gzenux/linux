@@ -162,7 +162,6 @@ static struct stm_nand_bank_data b2067_nand_flash = {
 	.csn		= 0,	/* Rev A/B : set JF3 2-3 (EMI_CS0 -> NAND_CS)
 				 * Rev C   : EMI_CS0 hardwired to NAND_CS
 				 */
-	.options	= NAND_NO_AUTOINCR,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.nr_partitions	= 2,
 	.partitions	= (struct mtd_partition []) {
@@ -312,7 +311,6 @@ arch_initcall(device_init);
 struct sh_machine_vector mv_b2067 __initmv = {
 	.mv_name = "b2067",
 	.mv_setup = b2067_setup,
-	.mv_nr_irqs = NR_IRQS,
 };
 
 #if defined(CONFIG_HIBERNATION_ON_MEMORY)

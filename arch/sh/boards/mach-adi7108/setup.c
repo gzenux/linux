@@ -157,7 +157,6 @@ static struct stm_plat_spifsm_data adi7108_serial_flash =  {
 /* NAND FLASH */
 static struct stm_nand_bank_data adi7108_nand_flash = {
 	.csn		= 1,
-	.options        = NAND_NO_AUTOINCR,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.nr_partitions	= 2,
 	.partitions	= (struct mtd_partition []) {
@@ -350,7 +349,6 @@ arch_initcall(device_init);
 struct sh_machine_vector mv_adi7108 __initmv = {
 	.mv_name = "adi7108",
 	.mv_setup = adi7108_setup,
-	.mv_nr_irqs = NR_IRQS,
 };
 
 #ifdef CONFIG_HIBERNATION_ON_MEMORY

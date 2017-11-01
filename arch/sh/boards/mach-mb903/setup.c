@@ -429,7 +429,6 @@ arch_initcall(mb903_device_init);
 struct sh_machine_vector mv_mb903 __initmv = {
 	.mv_name = "mb903",
 	.mv_setup = mb903_setup,
-	.mv_nr_irqs = NR_IRQS,
 };
 
 

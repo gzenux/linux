@@ -121,7 +121,6 @@ static struct stm_plat_spifsm_data b2039_serial_flash =  {
  */
 static struct stm_nand_bank_data b2039_nand_flash = {
 	.csn		= 0,
-	.options        = NAND_NO_AUTOINCR,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.nr_partitions	= 2,
 	.partitions	= (struct mtd_partition []) {
@@ -324,5 +323,4 @@ arch_initcall(device_init);
 struct sh_machine_vector mv_b2039 __initmv = {
 	.mv_name = "b2039",
 	.mv_setup = b2039_setup,
-	.mv_nr_irqs = NR_IRQS,
 };

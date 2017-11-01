@@ -331,6 +331,5 @@ arch_initcall(mb837_devices_init);
 struct sh_machine_vector mv_mb837 __initmv = {
 	.mv_name		= "mb837",
 	.mv_setup		= mb837_setup,
-	.mv_nr_irqs		= NR_IRQS,
 	STM_PCI_IO_MACHINE_VEC
 };
