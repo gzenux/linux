@@ -90,7 +90,6 @@ static struct stm_plat_spifsm_data b2141_serial_flash =  {
 /* NAND Flash */
 static struct stm_nand_bank_data b2141_nand_flash = {
 	.csn		= 0, /* EMI_CS0 hardwired to NAND_CS */
-	.options	= NAND_NO_AUTOINCR,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.nr_partitions	= 2,
 	.partitions	= (struct mtd_partition []) {
@@ -238,7 +237,6 @@ arch_initcall(device_init);
 struct sh_machine_vector mv_b2141 __initmv = {
 	.mv_name = "b2141",
 	.mv_setup = b2141_setup,
-	.mv_nr_irqs = NR_IRQS,
 };
 
 #if defined(CONFIG_HIBERNATION_ON_MEMORY)

@@ -70,7 +70,6 @@
 struct stm_nand_bank_data nand_bank_data = {
 	.csn			= STEM_CS0_BANK,
 	.emi_withinbankoffset	= STEM_CS0_OFFSET,
-	.options        = NAND_NO_AUTOINCR,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.nr_partitions	= 2,
 	.partitions	= (struct mtd_partition []) {

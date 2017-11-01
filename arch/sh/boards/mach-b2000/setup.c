@@ -58,7 +58,6 @@ static struct stm_pad_config stih415_hdmi_hp_pad_config = {
 /* NAND Flash */
 static struct stm_nand_bank_data b2000_nand_flash = {
 	.csn            = 0,
-	.options        = NAND_NO_AUTOINCR,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.nr_partitions  = 2,
 	.partitions     = (struct mtd_partition []) {
@@ -449,5 +448,4 @@ late_initcall(b2000_late_devices_setup);
 struct sh_machine_vector mv_b2000 __initmv = {
 	.mv_name		= "b2000",
 	.mv_setup		= b2000_setup,
-	.mv_nr_irqs		= NR_IRQS,
 };

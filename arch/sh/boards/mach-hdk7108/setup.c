@@ -236,7 +236,6 @@ static struct platform_device hdk7108_nor_flash = {
 /* NAND Flash: Micron NAND08GW3B2CN6 */
 static struct stm_nand_bank_data hdk7108_nand_flash = {
 	.csn		= 1,
-	.options        = NAND_NO_AUTOINCR,
 	.bbt_options	= NAND_BBT_USE_FLASH,
 	.nr_partitions	= 2,
 	.partitions	= (struct mtd_partition []) {
@@ -617,7 +616,6 @@ arch_initcall(device_init);
 struct sh_machine_vector mv_hdk7108 __initmv = {
 	.mv_name = "hdk7108",
 	.mv_setup = hdk7108_setup,
-	.mv_nr_irqs = NR_IRQS,
 };
 
 #ifdef CONFIG_HIBERNATION_ON_MEMORY

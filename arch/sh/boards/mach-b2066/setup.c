@@ -427,5 +427,4 @@ arch_initcall(b2066_device_init);
 struct sh_machine_vector mv_b2066 __initmv = {
 	.mv_name = "b2066",
 	.mv_setup = b2066_setup,
-	.mv_nr_irqs = NR_IRQS,
 };
