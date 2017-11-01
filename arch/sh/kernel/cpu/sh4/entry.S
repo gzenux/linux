@@ -818,13 +818,14 @@ work_pending:
 	! r8: current_thread_info
 	! t:  result of "tst	#_TIF_NEED_RESCHED, r0"
 	bf/s	work_resched
-	 tst	#(_TIF_SIGPENDING), r0
+	 tst	#(_TIF_SIGPENDING | _TIF_NOTIFY_RESUME), r0
 work_notifysig:
 	bt/s	restore_all
 	 mov	r15, r4		! [MT]
-	mov.l	2f, r1		! [LS]
-	mov	r0, r6		! [MT]
 	mov	r12, r5		! [MT] set arg1(save_r0)
+	mov	r0, r6		! [MT]
+	sti
+	mov.l	2f, r1		! [LS]
 	mov.l	3f, r0		! [LS]
 	jmp	@r1		! [CO]
 	 lds	r0, pr		! [CO]
@@ -954,15 +955,21 @@ ENTRY(system_call)
 
 	bt      syscall_badsys  ! 110 BR        4
 syscall_call:
+	shll2	r3		! x4
 	mov.l	3f, r8		!     MT	Load address of sys_call_table
 
 	add	r8, r3		!     EX
 
 	mov.l	@r3, r8		!     MT
-
+	mov.l	@(OFF_R2,r15), r2
+	mov.l	@(OFF_R1,r15), r1
+	mov.l	@(OFF_R0,r15), r0
+	mov.l	r2, @-r15
+	mov.l	r1, @-r15
+	mov.l	r0, @-r15
 	jsr	@r8	    	!     CO	jump to specific syscall handler
 	 nop
-
+	add	#12, r15
 	mov.l	@(OFF_R0,r15), r12		! save r0
 	mov.l	r0, @(OFF_R0,r15)		! save the return value
 	!
@@ -1008,14 +1015,14 @@ syscall_trace_entry:
 	mov	r15,r4		! [MT] pass stacked regs as arg
 	jsr	@r11	    	! [CO] superior (will chomp R[0-7])
 	 mov	#1, r5		! [EX] trace entry [1]
-
+	mov.l	r0, @(OFF_R0,r15)	! Save return value
 	!			Reload R0-R4 from kernel stack, where the
 	!   	    	    	parent may have modified them using
 	!   	    	    	ptrace(POKEUSR).  (Note that R0-R2 are
-	!   	    	    	used by the system call handler directly
-	!   	    	    	from the kernel stack anyway, so don't need
-	!   	    	    	to be reloaded here.)  This allows the parent
-	!   	    	    	to rewrite system calls and args on the fly.
+	!   	    	    	reloaded from the kernel stack by syscall_call
+	!   	    	    	below, so don't need to be reloaded here.)
+	!   	    	    	This allows the parent to rewrite system calls
+	!   	    	    	and args on the fly.
 	mov.l	@(OFF_R4,r15), r4   ! arg0
 	mov.l	@(OFF_R5,r15), r5
 	mov.l	@(OFF_R6,r15), r6
