@@ -647,8 +647,9 @@ error_desc_get:
 	return NULL;
 }
 
-static int stm_fdma_pause(struct stm_fdma_chan *fchan)
+static int stm_fdma_pause(struct dma_chan *chan)
 {
+	struct stm_fdma_chan *fchan = to_stm_fdma_chan(chan);
 	unsigned long irqflags = 0;
 	int result = 0;
 
@@ -683,8 +684,9 @@ static int stm_fdma_pause(struct stm_fdma_chan *fchan)
 	return result;
 }
 
-static int stm_fdma_resume(struct stm_fdma_chan *fchan)
+static int stm_fdma_resume(struct dma_chan *chan)
 {
+	struct stm_fdma_chan *fchan = to_stm_fdma_chan(chan);
 	unsigned long irqflags = 0;
 
 	spin_lock_irqsave(&fchan->lock, irqflags);
@@ -734,8 +736,9 @@ static void stm_fdma_stop(struct stm_fdma_chan *fchan)
 	spin_unlock_irqrestore(&fchan->lock, irqflags);
 }
 
-static int stm_fdma_terminate_all(struct stm_fdma_chan *fchan)
+static int stm_fdma_terminate_all(struct dma_chan *chan)
 {
+	struct stm_fdma_chan *fchan = to_stm_fdma_chan(chan);
 	struct stm_fdma_desc *fdesc, *_fdesc;
 	unsigned long irqflags = 0;
 	LIST_HEAD(list);
@@ -769,9 +772,10 @@ static int stm_fdma_terminate_all(struct stm_fdma_chan *fchan)
 	return 0;
 }
 
-static int stm_fdma_slave_config(struct stm_fdma_chan *fchan,
+static int stm_fdma_slave_config(struct dma_chan *chan,
 		struct dma_slave_config *config)
 {
+	struct stm_fdma_chan *fchan = to_stm_fdma_chan(chan);
 	struct stm_fdma_device *fdev = fchan->fdev;
 	unsigned long irqflags = 0;
 	dma_addr_t dma_addr = 0;
@@ -836,37 +840,6 @@ static int stm_fdma_slave_config(struct stm_fdma_chan *fchan,
 	spin_unlock(&fdev->dreq_lock);
 
 	return 0;
-}
-
-static int stm_fdma_control(struct dma_chan *chan, enum dma_ctrl_cmd cmd,
-		unsigned long arg)
-{
-	struct stm_fdma_chan *fchan = to_stm_fdma_chan(chan);
-	struct dma_slave_config *config;
-
-	dev_dbg(fchan->fdev->dev, "%s(chan_id=%d chan=%p, cmd=%d, arg=%lu)\n",
-			__func__, fchan->id, chan, cmd, arg);
-
-	switch (cmd) {
-	case DMA_PAUSE:
-		return stm_fdma_pause(fchan);
-
-	case DMA_RESUME:
-		return stm_fdma_resume(fchan);
-		break;
-
-	case DMA_TERMINATE_ALL:
-		return stm_fdma_terminate_all(fchan);
-
-	case DMA_SLAVE_CONFIG:
-		config = (struct dma_slave_config *) arg;
-		return stm_fdma_slave_config(fchan, config);
-
-	default:
-		dev_err(fchan->fdev->dev, "Invalid control cmd (%d)\n", cmd);
-	}
-
-	return -ENOSYS;
 }
 
 /*
@@ -1261,7 +1234,7 @@ static int stm_fdma_probe(struct platform_device *pdev)
 
 	/* Install the FDMA interrupt handler (and enabled the irq) */
 	result = devm_request_irq(&pdev->dev, irq, stm_fdma_irq_handler,
-			IRQF_DISABLED|IRQF_SHARED, dev_name(&pdev->dev), fdev);
+			IRQF_SHARED, dev_name(&pdev->dev), fdev);
 	if (result < 0) {
 		dev_err(&pdev->dev, "Failed to request irq\n");
 		result = -EBUSY;
@@ -1286,7 +1259,10 @@ static int stm_fdma_probe(struct platform_device *pdev)
 	fdev->dma_device.device_prep_dma_memcpy	= stm_fdma_prep_dma_memcpy;
 	fdev->dma_device.device_prep_slave_sg	= stm_fdma_prep_slave_sg;
 	fdev->dma_device.device_prep_dma_cyclic	= stm_fdma_prep_dma_cyclic;
-	fdev->dma_device.device_control		= stm_fdma_control;
+	fdev->dma_device.device_config		= stm_fdma_slave_config;
+	fdev->dma_device.device_pause		= stm_fdma_pause;
+	fdev->dma_device.device_resume		= stm_fdma_resume;
+	fdev->dma_device.device_terminate_all	= stm_fdma_terminate_all;
 	fdev->dma_device.device_tx_status	= stm_fdma_tx_status;
 	fdev->dma_device.device_issue_pending	= stm_fdma_issue_pending;
 
