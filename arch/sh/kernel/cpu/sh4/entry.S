@@ -880,23 +880,6 @@ work_resched:
  * number, in practice this is not used).
  */
 
-ENTRY(ret_from_fork)
-	mov.l	7f, r8
-	jsr	@r8
-	 mov	r0, r4
-	bra	syscall_exit
-	 nop
-
-ENTRY(ret_from_kernel_thread)
-	mov.l	7f, r8
-	jsr	@r8
-	 mov	r0, r4
-	mov.l	@(OFF_R5,r15), r5   ! fn
-	jsr	@r5
-	 mov.l	@(OFF_R4,r15), r4   ! arg
-	bra	syscall_exit
-	 nop
-
 /*
  * The poorly named main trapa decode and dispatch routine, for
  * system calls and debug traps through their respective jump tables.
@@ -1037,6 +1020,23 @@ syscall_trace_entry:
 	mov	#-ENOSYS, r0
 	bra	syscall_exit
 	 mov.l	r0, @(OFF_R0,r15)	! Return value
+
+ENTRY(ret_from_fork)
+	mov.l	7f, r8
+	jsr	@r8
+	 mov	r0, r4
+	bra	syscall_exit
+	 nop
+
+ENTRY(ret_from_kernel_thread)
+	mov.l	7f, r8
+	jsr	@r8
+	 mov	r0, r4
+	mov.l	@(OFF_R5,r15), r5   ! fn
+	jsr	@r5
+	 mov.l	@(OFF_R4,r15), r4   ! arg
+	bra	syscall_exit
+	 nop
 
 debug_trap:
 /*
