@@ -771,12 +771,14 @@ union dwc3_event {
 /* prototypes */
 void dwc3_set_mode(struct dwc3 *dwc, u32 mode);
 int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc);
+void dwc3_bus_setup(struct dwc3 *dwc);
 
 int dwc3_host_init(struct dwc3 *dwc);
 void dwc3_host_exit(struct dwc3 *dwc);
 
 int dwc3_gadget_init(struct dwc3 *dwc);
 void dwc3_gadget_exit(struct dwc3 *dwc);
+void dwc3_gadget_on_disconnect(struct dwc3 *dwc3_core);
 
 extern int dwc3_get_device_id(void);
 extern void dwc3_put_device_id(int id);

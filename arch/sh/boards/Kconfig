@@ -338,13 +338,35 @@ config SH_APSH4AD0A
 	help
 	  Select AP-SH4AD-0A if configuring for an ALPHAPROJECT AP-SH4AD-0A.
 
-endmenu
+comment "ST Main Boards"
+
+config SH_ST_EPLD
+	bool
+	default n
+
+config SH_ST_STEM
+	bool
+	default n
+
+config SH_ST_STPM_HD_V1
+	bool
+	default n
+
+config SH_ST_STPM_HD_V2
+	bool
+	default n
+
+config SH_ST_STPM_SD
+	bool
+	default n
 
 source "arch/sh/boards/mach-r2d/Kconfig"
 source "arch/sh/boards/mach-highlander/Kconfig"
 source "arch/sh/boards/mach-sdk7780/Kconfig"
 source "arch/sh/boards/mach-migor/Kconfig"
 source "arch/sh/boards/mach-rsk/Kconfig"
+
+endmenu
 
 if SH_MAGIC_PANEL_R2
 

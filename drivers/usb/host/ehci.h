@@ -140,6 +140,7 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		has_fsl_port_bug:1; /* FreeScale */
 	unsigned		big_endian_mmio:1;
 	unsigned		big_endian_desc:1;
+	unsigned		has_reset_port_bug:1; /* STMicroelectronics */
 	unsigned		big_endian_capbase:1;
 	unsigned		has_amcc_usb23:1;
 	unsigned		need_io_watchdog:1;
@@ -613,6 +614,13 @@ ehci_port_speed(struct ehci_hcd *ehci, unsigned int portsc)
 #define	ehci_has_fsl_portno_bug(e)		(0)
 #endif
 
+#ifdef CONFIG_USB_STM_COMMON_MODULE
+/* Some STMicrocelectronics controller doesn't deassert the reset bit
+ */
+#define ehci_has_reset_portno_bug(e)		((e)->has_reset_port_bug)
+#else
+#define ehci_has_reset_portno_bug(e)		(0)
+#endif
 /*
  * While most USB host controllers implement their registers in
  * little-endian format, a minority (celleb companion chip) implement
@@ -762,6 +770,23 @@ static inline unsigned ehci_read_frame_index(struct ehci_hcd *ehci)
 	return ehci_readl(ehci, &ehci->regs->frame_index);
 }
 
+#endif
+
+/*
+ * Writing to dma coherent memory on ARM may be delayed via L2
+ * writing buffer, so introduce the helper which can flush L2 writing
+ * buffer into memory immediately, especially used to flush ehci
+ * descriptor to memory.
+ */
+#ifdef	CONFIG_ARM_DMA_MEM_BUFFERABLE
+static inline void ehci_sync_mem(void)
+{
+	mb();
+}
+#else
+static inline void ehci_sync_mem(void)
+{
+}
 #endif
 
 /*-------------------------------------------------------------------------*/

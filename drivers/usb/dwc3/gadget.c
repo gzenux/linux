@@ -1815,6 +1815,11 @@ static void dwc3_clear_stall_all_ep(struct dwc3 *dwc)
 	}
 }
 
+void __weak dwc3_gadget_on_disconnect(struct dwc3 *dwc)
+{
+	return;
+}
+
 static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc)
 {
 	dev_vdbg(dwc->dev, "%s\n", __func__);
@@ -1833,6 +1838,7 @@ static void dwc3_gadget_disconnect_interrupt(struct dwc3 *dwc)
 
 	dwc3_stop_active_transfers(dwc);
 	dwc3_disconnect_gadget(dwc);
+	dwc3_gadget_on_disconnect(dwc);
 	dwc->start_config_issued = false;
 
 	dwc->gadget.speed = USB_SPEED_UNKNOWN;

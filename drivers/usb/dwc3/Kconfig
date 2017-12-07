@@ -14,6 +14,14 @@ config USB_DWC3
 
 if USB_DWC3
 
+config USB_DWC3_STM
+	tristate "STMicroelectronics Platforms"
+	depends on ARCH_STM
+	default USB_DWC3
+	help
+	  Recent STMicroelectronics SoCs ship with one DesignWare Core USB3 IP inside,
+	  say 'Y' or 'M' if you have one such device.
+
 config USB_DWC3_DEBUG
 	bool "Enable Debugging Messages"
 	help

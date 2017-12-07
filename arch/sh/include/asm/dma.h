@@ -67,13 +67,18 @@ struct dma_ops {
 	void (*free)(struct dma_channel *chan);
 
 	int (*get_residue)(struct dma_channel *chan);
-	int (*xfer)(struct dma_channel *chan);
+	int (*xfer)(struct dma_channel *chan, unsigned long sar,
+		    unsigned long dar, size_t count, unsigned int mode);
 	int (*configure)(struct dma_channel *chan, unsigned long flags);
 	int (*extend)(struct dma_channel *chan, unsigned long op, void *param);
 };
 
+struct dma_info;
+
 struct dma_channel {
 	char dev_id[16];		/* unique name per DMAC of channel */
+
+	struct dma_info *info;	/* SIM: can this be simply dma_ops? */
 
 	unsigned int chan;		/* DMAC channel number */
 	unsigned int vchan;		/* Virtual channel number */

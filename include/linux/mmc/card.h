@@ -188,7 +188,7 @@ struct sdio_func_tuple;
  * MMC Physical partitions
  */
 struct mmc_part {
-	unsigned int	size;	/* partition size (in bytes) */
+	u64	size;	/* partition size (in bytes) */
 	unsigned int	part_cfg;	/* partition type */
 	char	name[MAX_MMC_PART_NAME_LEN];
 	bool	force_ro;	/* to make boot parts RO by default */
@@ -275,7 +275,7 @@ struct mmc_card {
 /*
  * This function fill contents in mmc_part.
  */
-static inline void mmc_part_add(struct mmc_card *card, unsigned int size,
+static inline void mmc_part_add(struct mmc_card *card, u64 size,
 			unsigned int part_cfg, char *name, int idx, bool ro,
 			int area_type)
 {

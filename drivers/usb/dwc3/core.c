@@ -114,6 +114,17 @@ void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
 }
 
 /**
+ * dwc3_bus_setup - configure the bus link, if required
+ * (marking it as __weak gives glue code the chance to override)
+ * @dwc: pointer to our context structure
+ */
+
+void __weak dwc3_bus_setup(struct dwc3 *dwc)
+{
+	return;
+}
+
+/**
  * dwc3_core_soft_reset - Issues core soft reset and PHY reset
  * @dwc: pointer to our context structure
  */
@@ -360,6 +371,8 @@ static int __devinit dwc3_core_init(struct dwc3 *dwc)
 	default:
 		dev_dbg(dwc->dev, "No power optimization available\n");
 	}
+
+	dwc3_bus_setup(dwc);
 
 	/*
 	 * WORKAROUND: DWC3 revisions <1.90a have a bug

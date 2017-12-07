@@ -17,6 +17,7 @@ isa-$(CONFIG_CPU_SH3)			:= sh3
 isa-$(CONFIG_CPU_SH4)			:= sh4
 isa-$(CONFIG_CPU_SH4A)			:= sh4a
 isa-$(CONFIG_CPU_SH4AL_DSP)		:= sh4al
+isa-$(CONFIG_CPU_ST40_300)		:= st40-300
 isa-$(CONFIG_CPU_SH5)			:= shmedia
 
 ifeq ($(CONFIG_SUPERH32),y)
@@ -33,6 +34,8 @@ cflags-$(CONFIG_CPU_SH4)		:= $(call cc-option,-m4,) \
 cflags-$(CONFIG_CPU_SH4A)		+= $(call cc-option,-m4a,) \
 					   $(call cc-option,-m4a-nofpu,)
 cflags-$(CONFIG_CPU_SH4AL_DSP)		+= $(call cc-option,-m4al,)
+cflags-$(CONFIG_CPU_ST40_300)		+= $(call cc-option,-m4-300,) \
+					   $(call cc-option,-m4-300-nofpu,)
 cflags-$(CONFIG_CPU_SH5)		:= $(call cc-option,-m5-32media-nofpu,)
 
 ifeq ($(cflags-y),)

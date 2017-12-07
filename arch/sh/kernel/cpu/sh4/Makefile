@@ -3,9 +3,12 @@
 #
 
 obj-y	:= probe.o common.o
-common-y	+= $(addprefix ../sh3/, entry.o ex.o)
+common-y	+= entry.o
+obj-$(CONFIG_COUNT_EXCEPTIONS)		+= count_exceptions.o
 
-obj-$(CONFIG_HIBERNATION)		+= $(addprefix ../sh3/, swsusp.o)
+swsusp-y				:= $(addprefix ../sh3/, swsusp.o)
+obj-$(CONFIG_HIBERNATION)		+= swsusp.o
+
 obj-$(CONFIG_SH_FPU)			+= fpu.o softfloat.o
 obj-$(CONFIG_SH_STORE_QUEUES)		+= sq.o
 
@@ -32,5 +35,17 @@ endif
 # Additional clocks by subtype
 clock-$(CONFIG_CPU_SUBTYPE_SH4_202)	+= clock-sh4-202.o
 
-obj-y					+= $(clock-y)
+obj-y	+= $(clock-y)
 obj-$(CONFIG_PERF_EVENTS)		+= $(perf-y)
+obj-$(CONFIG_HAVE_HW_BREAKPOINT)	+= ubc.o
+
+obj-$(CONFIG_CPU_SUBTYPE_ST40)		+= stm-tmu.o
+
+cpufreq-y				:= cpufreq-stm.o
+obj-$(CONFIG_STM_CPU_FREQ)		+= $(cpufreq-y)
+
+suspend-y				:= stm_suspend.o stm_suspend-core.o
+obj-$(CONFIG_SUSPEND)			+= $(suspend-y)
+
+hom-y					:= stm_hom.o stm_hom-core.o
+obj-$(CONFIG_HIBERNATION_ON_MEMORY)	+= $(hom-y)

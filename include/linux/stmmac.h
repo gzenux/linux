@@ -49,10 +49,12 @@ struct plat_stmmacenet_data {
 	int enh_desc;
 	int tx_coe;
 	int bugged_jumbo;
+	int bugged_sg;
 	int pmt;
 	int force_sf_dma_mode;
 	void (*fix_mac_speed)(void *priv, unsigned int speed);
-	void (*bus_setup)(void __iomem *ioaddr);
+	void *(*bus_setup)(void __iomem *ioaddr, struct device *dev, void *d);
+	void *bus_data;
 	int (*init)(struct platform_device *pdev);
 	void (*exit)(struct platform_device *pdev);
 	void *custom_cfg;

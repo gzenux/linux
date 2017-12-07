@@ -45,3 +45,5 @@ ifneq ($(CONFIG_PCI),)
 	obj-$(CONFIG_USB_DWC3)		+= dwc3-pci.o
 endif
 
+obj-$(CONFIG_USB_DWC3_STM)		+= dwc3-stm.o
+

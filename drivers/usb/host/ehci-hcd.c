@@ -332,6 +332,14 @@ static int ehci_reset (struct ehci_hcd *ehci)
 	retval = handshake (ehci, &ehci->regs->command,
 			    CMD_RESET, 0, 250 * 1000);
 
+	/*
+	 * Some host controller doesn't deassert the reset bit
+	 */
+	if (retval == -ETIMEDOUT && ehci_has_reset_portno_bug(ehci)) {
+		ehci_writel(ehci, command & ~CMD_RESET, &ehci->regs->command);
+		retval = 0;
+	}
+
 	if (ehci->has_hostpc) {
 		ehci_writel(ehci, USBMODE_EX_HC | USBMODE_EX_VBPS,
 			(u32 __iomem *)(((u8 *)ehci->regs) + USBMODE_EX));
@@ -1271,6 +1279,11 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_USB_EHCI_SH
 #include "ehci-sh.c"
 #define PLATFORM_DRIVER		ehci_hcd_sh_driver
+#endif
+
+#if defined(CONFIG_USB_STM_COMMON) || defined(CONFIG_USB_STM_COMMON_MODULE)
+#include "ehci-stcore.c"
+#define	PLATFORM_DRIVER		ehci_hcd_stm_driver
 #endif
 
 #ifdef CONFIG_MIPS_ALCHEMY
