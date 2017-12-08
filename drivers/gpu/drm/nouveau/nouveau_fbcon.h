@@ -27,9 +27,10 @@
 #ifndef __NOUVEAU_FBCON_H__
 #define __NOUVEAU_FBCON_H__
 
-#include "drm_fb_helper.h"
+#include <drm/drm_fb_helper.h>
 
-#include "nouveau_fb.h"
+#include "nouveau_display.h"
+
 struct nouveau_fbdev {
 	struct drm_fb_helper helper;
 	struct nouveau_framebuffer nouveau_fb;
@@ -60,7 +61,6 @@ void nouveau_fbcon_gpu_lockup(struct fb_info *info);
 int nouveau_fbcon_init(struct drm_device *dev);
 void nouveau_fbcon_fini(struct drm_device *dev);
 void nouveau_fbcon_set_suspend(struct drm_device *dev, int state);
-void nouveau_fbcon_zfill_all(struct drm_device *dev);
 void nouveau_fbcon_save_disable_accel(struct drm_device *dev);
 void nouveau_fbcon_restore_accel(struct drm_device *dev);
 

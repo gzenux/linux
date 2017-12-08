@@ -64,7 +64,7 @@ static int stm_fdma_xbar_route(struct stm_fdma_dreq_router *router,
  * Platform driver initialise
  */
 
-static int __devinit stm_fdma_xbar_probe(struct platform_device *pdev)
+static int stm_fdma_xbar_probe(struct platform_device *pdev)
 {
 	struct stm_fdma_xbar *xbar;
 	struct resource *iores;
@@ -129,7 +129,7 @@ static int __devinit stm_fdma_xbar_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int __devexit stm_fdma_xbar_remove(struct platform_device *pdev)
+static int stm_fdma_xbar_remove(struct platform_device *pdev)
 {
 	struct stm_fdma_xbar *xbar = platform_get_drvdata(pdev);
 

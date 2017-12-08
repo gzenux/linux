@@ -18,6 +18,7 @@
  */
 
 #include <linux/kthread.h>
+#include <linux/file.h>
 #include <linux/net.h>
 
 #include "usbip_common.h"
@@ -26,7 +27,7 @@
 /* TODO: refine locking ?*/
 
 /* Sysfs entry to show port status */
-static ssize_t show_status(struct device *dev, struct device_attribute *attr,
+static ssize_t status_show(struct device *dev, struct device_attribute *attr,
 			   char *out)
 {
 	char *s = out;
@@ -46,8 +47,8 @@ static ssize_t show_status(struct device *dev, struct device_attribute *attr,
 	 * up /proc/net/{tcp,tcp6}. Also, a userland program may remember a
 	 * port number and its peer IP address.
 	 */
-	out += sprintf(out, "prt sta spd bus dev socket           "
-		       "local_busid\n");
+	out += sprintf(out,
+		       "prt sta spd bus dev socket           local_busid\n");
 
 	for (i = 0; i < VHCI_NPORTS; i++) {
 		struct vhci_device *vdev = port_to_vdev(i);
@@ -73,7 +74,7 @@ static ssize_t show_status(struct device *dev, struct device_attribute *attr,
 
 	return out - s;
 }
-static DEVICE_ATTR(status, S_IRUGO, show_status, NULL);
+static DEVICE_ATTR_RO(status);
 
 /* Sysfs entry to shutdown a virtual connection */
 static int vhci_port_disconnect(__u32 rhport)
@@ -113,7 +114,8 @@ static ssize_t store_detach(struct device *dev, struct device_attribute *attr,
 	int err;
 	__u32 rhport = 0;
 
-	sscanf(buf, "%u", &rhport);
+	if (sscanf(buf, "%u", &rhport) != 1)
+		return -EINVAL;
 
 	/* check rhport */
 	if (rhport >= VHCI_NPORTS) {
@@ -148,7 +150,8 @@ static int valid_args(__u32 rhport, enum usb_device_speed speed)
 	case USB_SPEED_WIRELESS:
 		break;
 	default:
-		pr_err("speed %d\n", speed);
+		pr_err("Failed attach request for unsupported USB speed: %s\n",
+			usb_speed_string(speed));
 		return -EINVAL;
 	}
 
@@ -173,6 +176,7 @@ static ssize_t store_attach(struct device *dev, struct device_attribute *attr,
 	struct socket *socket;
 	int sockfd = 0;
 	__u32 rhport = 0, devid = 0, speed = 0;
+	int err;
 
 	/*
 	 * @rhport: port number of vhci_hcd
@@ -180,7 +184,8 @@ static ssize_t store_attach(struct device *dev, struct device_attribute *attr,
 	 * @devid: unique device identifier in a remote host
 	 * @speed: usb device speed in a remote host
 	 */
-	sscanf(buf, "%u %u %u %u", &rhport, &sockfd, &devid, &speed);
+	if (sscanf(buf, "%u %u %u %u", &rhport, &sockfd, &devid, &speed) != 4)
+		return -EINVAL;
 
 	usbip_dbg_vhci_sysfs("rhport(%u) sockfd(%u) devid(%u) speed(%u)\n",
 			     rhport, sockfd, devid, speed);
@@ -189,8 +194,8 @@ static ssize_t store_attach(struct device *dev, struct device_attribute *attr,
 	if (valid_args(rhport, speed) < 0)
 		return -EINVAL;
 
-	/* check sockfd */
-	socket = sockfd_to_socket(sockfd);
+	/* Extract socket from fd. */
+	socket = sockfd_lookup(sockfd, &err);
 	if (!socket)
 		return -EINVAL;
 
@@ -206,12 +211,15 @@ static ssize_t store_attach(struct device *dev, struct device_attribute *attr,
 		spin_unlock(&vdev->ud.lock);
 		spin_unlock(&the_controller->lock);
 
+		sockfd_put(socket);
+
 		dev_err(dev, "port %d already used\n", rhport);
 		return -EINVAL;
 	}
 
-	dev_info(dev, "rhport(%u) sockfd(%d) devid(%u) speed(%u)\n",
-		 rhport, sockfd, devid, speed);
+	dev_info(dev,
+		 "rhport(%u) sockfd(%d) devid(%u) speed(%u) speed_str(%s)\n",
+		 rhport, sockfd, devid, speed, usb_speed_string(speed));
 
 	vdev->devid         = devid;
 	vdev->speed         = speed;
@@ -222,8 +230,8 @@ static ssize_t store_attach(struct device *dev, struct device_attribute *attr,
 	spin_unlock(&the_controller->lock);
 	/* end the lock */
 
-	vdev->ud.tcp_rx = kthread_run(vhci_rx_loop, &vdev->ud, "vhci_rx");
-	vdev->ud.tcp_tx = kthread_run(vhci_tx_loop, &vdev->ud, "vhci_tx");
+	vdev->ud.tcp_rx = kthread_get_run(vhci_rx_loop, &vdev->ud, "vhci_rx");
+	vdev->ud.tcp_tx = kthread_get_run(vhci_tx_loop, &vdev->ud, "vhci_tx");
 
 	rh_port_connect(rhport, speed);
 

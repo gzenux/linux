@@ -32,7 +32,6 @@
  */
 
 /* #define DEBUG */
-#include <linux/init.h>
 #include <linux/module.h>
 #include <linux/miscdevice.h>
 #include <linux/fs.h>
@@ -43,7 +42,6 @@
 #include <linux/mm.h>
 #include <linux/poll.h>
 #include <linux/wait.h>
-#include <linux/pci.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/err.h>
@@ -85,28 +83,6 @@ static void sep_dequeuer(void *data);
 
 /* TESTING */
 /**
- * crypto_sep_dump_message - dump the message that is pending
- * @sep: SEP device
- * This will only print dump if DEBUG is set; it does
- * follow kernel debug print enabling
- */
-static void crypto_sep_dump_message(struct sep_device *sep, void *msg)
-{
-#if 0
-	u32 *p;
-	u32 *i;
-	int count;
-
-	p = sep->shared_addr;
-	i = (u32 *)msg;
-	for (count = 0; count < 10 * 4; count += 4)
-		dev_dbg(&sep->pdev->dev,
-			"[PID%d] Word %d of the message is %x (local)%x\n",
-				current->pid, count/4, *p++, *i++);
-#endif
-}
-
-/**
  *	sep_do_callback
  *	@work: pointer to work_struct
  *	This is what is called by the queue; it is generic so that it
@@ -117,6 +93,7 @@ static void sep_do_callback(struct work_struct *work)
 {
 	struct sep_work_struct *sep_work = container_of(work,
 		struct sep_work_struct, work);
+
 	if (sep_work != NULL) {
 		(sep_work->callback)(sep_work->data);
 		kfree(sep_work);
@@ -136,7 +113,7 @@ static void sep_do_callback(struct work_struct *work)
  *	on what operation is to be done
  */
 static int sep_submit_work(struct workqueue_struct *work_queue,
-	void(*funct)(void *),
+	void (*funct)(void *),
 	void *data)
 {
 	struct sep_work_struct *sep_work;
@@ -201,11 +178,9 @@ static struct scatterlist *sep_alloc_sg_buf(
 		nbr_pages += 1;
 	}
 
-	sg = kmalloc((sizeof(struct scatterlist) * nbr_pages), GFP_ATOMIC);
-	if (!sg) {
-		dev_warn(&sep->pdev->dev, "Cannot allocate page for new sg\n");
+	sg = kmalloc_array(nbr_pages, sizeof(struct scatterlist), GFP_ATOMIC);
+	if (!sg)
 		return NULL;
-	}
 
 	sg_init_table(sg, nbr_pages);
 
@@ -487,55 +462,6 @@ static int partial_overlap(void *src_ptr, void *dst_ptr, u32 nbytes)
 	return 0;
 }
 
-/* Debug - prints only if DEBUG is defined; follows kernel debug model */
-static void sep_dump(struct sep_device *sep, char *stg, void *start, int len)
-{
-#if 0
-	int ct1;
-	u8 *ptt;
-
-	dev_dbg(&sep->pdev->dev,
-		"Dump of %s starting at %08lx for %08x bytes\n",
-		stg, (unsigned long)start, len);
-	for (ct1 = 0; ct1 < len; ct1 += 1) {
-		ptt = (u8 *)(start + ct1);
-		dev_dbg(&sep->pdev->dev, "%02x ", *ptt);
-		if (ct1 % 16 == 15)
-			dev_dbg(&sep->pdev->dev, "\n");
-	}
-	dev_dbg(&sep->pdev->dev, "\n");
-#endif
-}
-
-/* Debug - prints only if DEBUG is defined; follows kernel debug model */
-static void sep_dump_sg(struct sep_device *sep, char *stg,
-			struct scatterlist *sg)
-{
-#if 0
-	int ct1, ct2;
-	u8 *ptt;
-
-	dev_dbg(&sep->pdev->dev, "Dump of scatterlist %s\n", stg);
-
-	ct1 = 0;
-	while (sg) {
-		dev_dbg(&sep->pdev->dev, "page %x\n size %x", ct1,
-			sg->length);
-		dev_dbg(&sep->pdev->dev, "phys addr is %lx",
-			(unsigned long)sg_phys(sg));
-		ptt = sg_virt(sg);
-		for (ct2 = 0; ct2 < sg->length; ct2 += 1) {
-			dev_dbg(&sep->pdev->dev, "byte %x is %02x\n",
-				ct2, (unsigned char)*(ptt + ct2));
-		}
-
-		ct1 += 1;
-		sg = sg_next(sg);
-	}
-	dev_dbg(&sep->pdev->dev, "\n");
-#endif
-}
-
 /* Debug - prints only if DEBUG is defined */
 static void sep_dump_ivs(struct ablkcipher_request *req, char *reason)
 
@@ -724,6 +650,7 @@ weak:
 static u32 sep_sg_nents(struct scatterlist *sg)
 {
 	u32 ct1 = 0;
+
 	while (sg) {
 		ct1 += 1;
 		sg = sg_next(sg);
@@ -741,6 +668,7 @@ static u32 sep_sg_nents(struct scatterlist *sg)
 static u32 sep_start_msg(struct this_task_ctx *ta_ctx)
 {
 	u32 *word_ptr;
+
 	ta_ctx->msg_len_words = 2;
 	ta_ctx->msgptr = ta_ctx->msg;
 	memset(ta_ctx->msg, 0, SEP_DRIVER_MESSAGE_SHARED_AREA_SIZE_IN_BYTES);
@@ -807,7 +735,7 @@ end_function:
  *	@size: size of parameter to copy (in bytes)
  *	@max_size: size to move up offset; SEP mesg is in word sizes
  *	@msg_offset: pointer to current offset (is updated)
- *	@byte_array: flag ti indicate wheter endian must be changed
+ *	@byte_array: flag ti indicate whether endian must be changed
  *	Copies data into the message area from caller
  */
 static void sep_write_msg(struct this_task_ctx *ta_ctx, void *in_addr,
@@ -815,6 +743,7 @@ static void sep_write_msg(struct this_task_ctx *ta_ctx, void *in_addr,
 {
 	u32 *word_ptr;
 	void *void_ptr;
+
 	void_ptr = ta_ctx->msgptr + *msg_offset;
 	word_ptr = (u32 *)void_ptr;
 	memcpy(void_ptr, in_addr, size);
@@ -823,6 +752,7 @@ static void sep_write_msg(struct this_task_ctx *ta_ctx, void *in_addr,
 	/* Do we need to manipulate endian? */
 	if (byte_array) {
 		u32 i;
+
 		for (i = 0; i < ((size + 3) / 4); i += 1)
 			*(word_ptr + i) = CHG_ENDIAN(*(word_ptr + i));
 	}
@@ -855,7 +785,7 @@ static void sep_make_header(struct this_task_ctx *ta_ctx, u32 *msg_offset,
  *	@size: size of parameter to copy (in bytes)
  *	@max_size: size to move up offset; SEP mesg is in word sizes
  *	@msg_offset: pointer to current offset (is updated)
- *	@byte_array: flag ti indicate wheter endian must be changed
+ *	@byte_array: flag ti indicate whether endian must be changed
  *	Copies data out of the message area to caller
  */
 static void sep_read_msg(struct this_task_ctx *ta_ctx, void *in_addr,
@@ -863,12 +793,14 @@ static void sep_read_msg(struct this_task_ctx *ta_ctx, void *in_addr,
 {
 	u32 *word_ptr;
 	void *void_ptr;
+
 	void_ptr = ta_ctx->msgptr + *msg_offset;
 	word_ptr = (u32 *)void_ptr;
 
 	/* Do we need to manipulate endian? */
 	if (byte_array) {
 		u32 i;
+
 		for (i = 0; i < ((size + 3) / 4); i += 1)
 			*(word_ptr + i) = CHG_ENDIAN(*(word_ptr + i));
 	}
@@ -940,6 +872,7 @@ static void sep_read_context(struct this_task_ctx *ta_ctx, u32 *msg_offset,
 	void *dst, u32 len)
 {
 	u32 max_length = ((len + 3) / sizeof(u32)) * sizeof(u32);
+
 	sep_read_msg(ta_ctx, dst, len, max_length, msg_offset, 0);
 }
 
@@ -959,6 +892,7 @@ static void sep_write_context(struct this_task_ctx *ta_ctx, u32 *msg_offset,
 	void *src, u32 len)
 {
 	u32 max_length = ((len + 3) / sizeof(u32)) * sizeof(u32);
+
 	sep_write_msg(ta_ctx, src, len, max_length, msg_offset, 0);
 }
 
@@ -990,7 +924,7 @@ static void sep_clear_out(struct this_task_ctx *ta_ctx)
 		/**
 		 * The following unlocks the sep and makes it available
 		 * to any other application
-		 * First, null out crypto entries in sep before relesing it
+		 * First, null out crypto entries in sep before releasing it
 		 */
 		ta_ctx->sep_used->current_hash_req = NULL;
 		ta_ctx->sep_used->current_cypher_req = NULL;
@@ -1001,7 +935,7 @@ static void sep_clear_out(struct this_task_ctx *ta_ctx)
 
 		ta_ctx->call_status.status = 0;
 
-		/* Remove anything confidentail */
+		/* Remove anything confidential */
 		memset(ta_ctx->sep_used->shared_addr, 0,
 			SEP_DRIVER_MESSAGE_SHARED_AREA_SIZE_IN_BYTES);
 
@@ -1095,8 +1029,8 @@ static int sep_crypto_take_sep(struct this_task_ctx *ta_ctx)
 		current->comm, sizeof(current->comm));
 
 	if (!ta_ctx->queue_elem) {
-		dev_dbg(&sep->pdev->dev, "[PID%d] updating queue"
-			" status error\n", current->pid);
+		dev_dbg(&sep->pdev->dev,
+			"[PID%d] updating queue status error\n", current->pid);
 		return -EINVAL;
 	}
 
@@ -1207,8 +1141,8 @@ static int sep_crypto_block_data(struct ablkcipher_request *req)
 		req->nbytes, ta_ctx->walk.blocksize, &new_sg, 1);
 
 	if (int_error < 0) {
-		dev_warn(&ta_ctx->sep_used->pdev->dev, "oddball page eerror\n");
-		return -ENOMEM;
+		dev_warn(&ta_ctx->sep_used->pdev->dev, "oddball page error\n");
+		return int_error;
 	} else if (int_error == 1) {
 		ta_ctx->src_sg = new_sg;
 		ta_ctx->src_sg_hold = new_sg;
@@ -1223,7 +1157,7 @@ static int sep_crypto_block_data(struct ablkcipher_request *req)
 	if (int_error < 0) {
 		dev_warn(&ta_ctx->sep_used->pdev->dev, "walk phys error %x\n",
 			int_error);
-		return -ENOMEM;
+		return int_error;
 	} else if (int_error == 1) {
 		ta_ctx->dst_sg = new_sg;
 		ta_ctx->dst_sg_hold = new_sg;
@@ -1237,9 +1171,6 @@ static int sep_crypto_block_data(struct ablkcipher_request *req)
 
 	/* Key already done; this is for data */
 	dev_dbg(&ta_ctx->sep_used->pdev->dev, "sending data\n");
-
-	sep_dump_sg(ta_ctx->sep_used,
-		"block sg in", ta_ctx->src_sg);
 
 	/* check for valid data and proper spacing */
 	src_ptr = sg_virt(ta_ctx->src_sg);
@@ -1283,7 +1214,7 @@ static int sep_crypto_block_data(struct ablkcipher_request *req)
 
 		if (copy_result != crypto_ablkcipher_blocksize(tfm)) {
 			dev_warn(&ta_ctx->sep_used->pdev->dev,
-				"des block copy faild\n");
+				"des block copy failed\n");
 			return -ENOMEM;
 		}
 
@@ -1362,14 +1293,10 @@ static int sep_crypto_block_data(struct ablkcipher_request *req)
 		sep_write_context(ta_ctx, &msg_offset,
 			&sctx->des_private_ctx,
 			sizeof(struct sep_des_private_context));
-		sep_dump(ta_ctx->sep_used, "ctx to block des",
-			&sctx->des_private_ctx, 40);
 	} else {
 		sep_write_context(ta_ctx, &msg_offset,
 			&sctx->aes_private_ctx,
 			sizeof(struct sep_aes_private_context));
-		sep_dump(ta_ctx->sep_used, "ctx to block aes",
-			&sctx->aes_private_ctx, 20);
 	}
 
 	/* conclude message */
@@ -1426,8 +1353,6 @@ static int sep_crypto_send_key(struct ablkcipher_request *req)
 		}
 
 		memcpy(ta_ctx->iv, ta_ctx->walk.iv, SEP_DES_IV_SIZE_BYTES);
-		sep_dump(ta_ctx->sep_used, "iv",
-			ta_ctx->iv, SEP_DES_IV_SIZE_BYTES);
 	}
 
 	if ((ta_ctx->current_request == AES_CBC) &&
@@ -1438,8 +1363,6 @@ static int sep_crypto_send_key(struct ablkcipher_request *req)
 		}
 
 		memcpy(ta_ctx->iv, ta_ctx->walk.iv, SEP_AES_IV_SIZE_BYTES);
-		sep_dump(ta_ctx->sep_used, "iv",
-			ta_ctx->iv, SEP_AES_IV_SIZE_BYTES);
 	}
 
 	/* put together message to SEP */
@@ -1452,8 +1375,6 @@ static int sep_crypto_send_key(struct ablkcipher_request *req)
 			sep_write_msg(ta_ctx, ta_ctx->iv,
 				SEP_DES_IV_SIZE_BYTES, sizeof(u32) * 4,
 				&msg_offset, 1);
-			sep_dump(ta_ctx->sep_used, "initial IV",
-				ta_ctx->walk.iv, SEP_DES_IV_SIZE_BYTES);
 		} else {
 			/* Skip if ECB */
 			msg_offset += 4 * sizeof(u32);
@@ -1465,8 +1386,6 @@ static int sep_crypto_send_key(struct ablkcipher_request *req)
 			sep_write_msg(ta_ctx, ta_ctx->iv,
 				SEP_AES_IV_SIZE_BYTES, max_length,
 				&msg_offset, 1);
-			sep_dump(ta_ctx->sep_used, "initial IV",
-				ta_ctx->walk.iv, SEP_AES_IV_SIZE_BYTES);
 		} else {
 				/* Skip if ECB */
 				msg_offset += max_length;
@@ -1646,7 +1565,6 @@ static u32 crypto_post_op(struct sep_device *sep)
 
 	dev_dbg(&ta_ctx->sep_used->pdev->dev, "crypto post_op\n");
 	dev_dbg(&ta_ctx->sep_used->pdev->dev, "crypto post_op message dump\n");
-	crypto_sep_dump_message(ta_ctx->sep_used, ta_ctx->msg);
 
 	/* first bring msg from shared area to local area */
 	memcpy(ta_ctx->msg, sep->shared_addr,
@@ -1670,16 +1588,10 @@ static u32 crypto_post_op(struct sep_device *sep)
 			sep_read_context(ta_ctx, &msg_offset,
 			&sctx->des_private_ctx,
 			sizeof(struct sep_des_private_context));
-
-			sep_dump(ta_ctx->sep_used, "ctx init des",
-				&sctx->des_private_ctx, 40);
 		} else {
 			sep_read_context(ta_ctx, &msg_offset,
 			&sctx->aes_private_ctx,
 			sizeof(struct sep_aes_private_context));
-
-			sep_dump(ta_ctx->sep_used, "ctx init aes",
-				&sctx->aes_private_ctx, 20);
 		}
 
 		sep_dump_ivs(req, "after sending key to sep\n");
@@ -1733,7 +1645,7 @@ static u32 crypto_post_op(struct sep_device *sep)
 					crypto_ablkcipher_blocksize(tfm)) {
 
 					dev_warn(&ta_ctx->sep_used->pdev->dev,
-						"des block copy faild\n");
+						"des block copy failed\n");
 					sep_crypto_release(sctx, ta_ctx,
 						-ENOMEM);
 					return -ENOMEM;
@@ -1757,9 +1669,6 @@ static u32 crypto_post_op(struct sep_device *sep)
 				&sctx->aes_private_ctx,
 				sizeof(struct sep_aes_private_context));
 		}
-
-		sep_dump_sg(ta_ctx->sep_used,
-			"block sg out", ta_ctx->dst_sg);
 
 		/* Copy to correct sg if this block had oddball pages */
 		if (ta_ctx->dst_sg_hold)
@@ -1870,7 +1779,7 @@ static u32 hash_update_post_op(struct sep_device *sep)
 		sizeof(struct sep_hash_private_context));
 
 	/**
-	 * Following is only for finup; if we just completd the
+	 * Following is only for finup; if we just completed the
 	 * data portion of finup, we now need to kick off the
 	 * finish portion of finup.
 	 */
@@ -2011,7 +1920,7 @@ static u32 hash_digest_post_op(struct sep_device *sep)
 }
 
 /**
- * The sep_finish function is the function that is schedule (via tasket)
+ * The sep_finish function is the function that is scheduled (via tasklet)
  * by the interrupt service routine when the SEP sends and interrupt
  * This is only called by the interrupt handler as a tasklet.
  */
@@ -2249,7 +2158,7 @@ static void sep_hash_update(void *data)
 	head_len = (block_size - int_ctx->prev_update_bytes) % block_size;
 	tail_len = (req->nbytes - head_len) % block_size;
 
-	/* Make sure all pages are even block */
+	/* Make sure all pages are an even block */
 	int_error = sep_oddball_pages(ta_ctx->sep_used, req->src,
 		req->nbytes,
 		block_size, &new_sg, 1);
@@ -2273,8 +2182,6 @@ static void sep_hash_update(void *data)
 		/* null data */
 		src_ptr = NULL;
 	}
-
-	sep_dump_sg(ta_ctx->sep_used, "hash block sg in", ta_ctx->src_sg);
 
 	ta_ctx->dcb_input_data.app_in_address = src_ptr;
 	ta_ctx->dcb_input_data.data_in_size =
@@ -2482,7 +2389,7 @@ static void sep_hash_digest(void *data)
 	dev_dbg(&ta_ctx->sep_used->pdev->dev, "block_size is %x\n", block_size);
 	dev_dbg(&ta_ctx->sep_used->pdev->dev, "tail len is %x\n", tail_len);
 
-	/* Make sure all pages are even block */
+	/* Make sure all pages are an even block */
 	int_error = sep_oddball_pages(ta_ctx->sep_used, req->src,
 		req->nbytes,
 		block_size, &new_sg, 1);
@@ -2506,8 +2413,6 @@ static void sep_hash_digest(void *data)
 		/* null data */
 		src_ptr = NULL;
 	}
-
-	sep_dump_sg(ta_ctx->sep_used, "hash block sg in", ta_ctx->src_sg);
 
 	ta_ctx->dcb_input_data.app_in_address = src_ptr;
 	ta_ctx->dcb_input_data.data_in_size = req->nbytes - tail_len;
@@ -3997,6 +3902,7 @@ static struct crypto_alg crypto_algs[] = {
 int sep_crypto_setup(void)
 {
 	int err, i, j, k;
+
 	tasklet_init(&sep_dev->finish_tasklet, sep_finish,
 		(unsigned long)sep_dev);
 
@@ -4009,13 +3915,9 @@ int sep_crypto_setup(void)
 		return -ENOMEM;
 	}
 
-	i = 0;
-	j = 0;
-
 	spin_lock_init(&queue_lock);
 
 	err = 0;
-
 	for (i = 0; i < ARRAY_SIZE(hash_algs); i++) {
 		err = crypto_register_ahash(&hash_algs[i]);
 		if (err)
@@ -4034,6 +3936,7 @@ int sep_crypto_setup(void)
 err_algs:
 	for (k = 0; k < i; k++)
 		crypto_unregister_ahash(&hash_algs[k]);
+	destroy_workqueue(sep_dev->workqueue);
 	return err;
 
 err_crypto_algs:
@@ -4052,6 +3955,7 @@ void sep_crypto_takedown(void)
 	for (i = 0; i < ARRAY_SIZE(crypto_algs); i++)
 		crypto_unregister_alg(&crypto_algs[i]);
 
+	destroy_workqueue(sep_dev->workqueue);
 	tasklet_kill(&sep_dev->finish_tasklet);
 }
 

@@ -1,6 +1,6 @@
 /* ir-rc5-sz-decoder.c - handle RC5 Streamzap IR Pulse/Space protocol
  *
- * Copyright (C) 2010 by Mauro Carvalho Chehab <mchehab@redhat.com>
+ * Copyright (C) 2010 by Mauro Carvalho Chehab
  * Copyright (C) 2010 by Jarod Wilson <jarod@redhat.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -48,8 +48,8 @@ static int ir_rc5_sz_decode(struct rc_dev *dev, struct ir_raw_event ev)
 	u8 toggle, command, system;
 	u32 scancode;
 
-        if (!(dev->raw->enabled_protocols & RC_TYPE_RC5_SZ))
-                return 0;
+	if (!rc_protocols_enabled(dev, RC_BIT_RC5_SZ))
+		return 0;
 
 	if (!is_timing_event(ev)) {
 		if (ev.reset)
@@ -128,7 +128,7 @@ out:
 }
 
 static struct ir_raw_handler rc5_sz_handler = {
-	.protocols	= RC_TYPE_RC5_SZ,
+	.protocols	= RC_BIT_RC5_SZ,
 	.decode		= ir_rc5_sz_decode,
 };
 

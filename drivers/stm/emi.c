@@ -478,7 +478,7 @@ static const struct dev_pm_ops emi_pm_ops = {
 };
 #endif
 
-static int __devinit remap_named_resource(struct platform_device *pdev,
+static int remap_named_resource(struct platform_device *pdev,
 				       char *name,
 				       void __iomem **io_ptr)
 {
@@ -522,7 +522,7 @@ static void *emi_driver_get_pdata(struct platform_device *pdev)
 	return stm_of_get_dev_config(&pdev->dev);
 }
 
-static int __devinit emi_driver_probe(struct platform_device *pdev)
+static int emi_driver_probe(struct platform_device *pdev)
 {
 	struct resource	*res;
 	int err;

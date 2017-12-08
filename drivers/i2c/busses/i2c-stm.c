@@ -83,7 +83,6 @@
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/of.h>
-#include <linux/of_i2c.h>
 #include <linux/stm/platform.h>
 #include <linux/stm/ssc.h>
 
@@ -573,7 +572,7 @@ be_fsm_stop:
 
 		if (++trsc->current_msg < trsc->queue_length) {
 			/* More transactions left... */
-			if (pmsg->flags & I2C_M_NOREPSTART) {
+			if (pmsg->flags & I2C_M_STOP) {
 				/* no repstart - stop then start */
 				dbg_print2(" STOP - STOP\n");
 				trsc->next_state = IIC_FSM_NOREPSTART;
@@ -1254,6 +1253,7 @@ static int iic_stm_probe(struct platform_device *pdev)
 	i2c_stm->adapter.nr = id;
 	i2c_stm->adapter.algo = &iic_stm_algo;
 	i2c_stm->adapter.dev.parent = &(pdev->dev);
+	i2c_stm->adapter.dev.of_node = pdev->dev.of_node;
 	if (plat_data->i2c_speed == 400)
 		i2c_stm->config = IIC_STM_CONFIG_SPEED_FAST;
 	else
@@ -1281,9 +1281,6 @@ static int iic_stm_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Cannot create fastmode sysfs entry\n");
 		return err;
 	}
-
-	i2c_stm->adapter.dev.of_node = pdev->dev.of_node;
-	of_i2c_register_devices(&i2c_stm->adapter);
 
 	/* by default the device is on */
 	pm_runtime_set_active(&pdev->dev);

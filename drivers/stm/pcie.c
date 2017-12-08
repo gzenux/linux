@@ -506,7 +506,7 @@ static void stm_pcie_board_reset(struct device *dev)
 
 
 /* Sets up any clocking, resets the controller and disables link training */
-static int __devinit stm_pcie_hw_init(struct platform_device *pdev)
+static int stm_pcie_hw_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct stm_plat_pcie_config *config = dev_get_platdata(dev);
@@ -522,7 +522,7 @@ static int __devinit stm_pcie_hw_init(struct platform_device *pdev)
 	return 0;
 }
 
-static int __devinit stm_pcie_hw_setup(struct device *dev,
+static int stm_pcie_hw_setup(struct device *dev,
 				       phys_addr_t lmi_window_start,
 				       unsigned long lmi_window_size,
 				       phys_addr_t config_window_start)
@@ -581,7 +581,7 @@ static int __devinit stm_pcie_hw_setup(struct device *dev,
 	return 0;
 }
 
-static int __devinit remap_named_resource(struct platform_device *pdev,
+static int remap_named_resource(struct platform_device *pdev,
 					  const char *name,
 					  void __iomem **io_ptr)
 {
@@ -615,9 +615,9 @@ static irqreturn_t stm_pcie_sys_err(int irq, void *dev_data)
 
 
 #ifdef CONFIG_PCI_MSI
-static int __devinit stm_msi_probe(struct platform_device *pdev);
+static int stm_msi_probe(struct platform_device *pdev);
 #else
-static int __devinit stm_msi_probe(struct platform_device *pdev) { return 0; }
+static int stm_msi_probe(struct platform_device *pdev) { return 0; }
 #endif
 
 static void  stm_of_get_window(struct device_node *np, const char *name,
@@ -660,7 +660,7 @@ static void *stm_pcie_get_pdata(struct platform_device *pdev)
  * block is powered up and ready to rock, and that all sysconfigs have been
  * set correctly.
  */
-static int __devinit stm_pcie_probe(struct platform_device *pdev)
+static int stm_pcie_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct stm_plat_pcie_config *config;
@@ -945,7 +945,7 @@ static struct irq_chip msi_chip = {
 };
 
 
-static void __devinit msi_init_one(struct stm_msi_info *msi)
+static void msi_init_one(struct stm_msi_info *msi)
 {
 	int ep;
 
@@ -965,7 +965,7 @@ static void __devinit msi_init_one(struct stm_msi_info *msi)
 }
 
 
-static int __devinit stm_msi_probe(struct platform_device *pdev)
+static int stm_msi_probe(struct platform_device *pdev)
 {
 	int irq;
 	struct resource *res;

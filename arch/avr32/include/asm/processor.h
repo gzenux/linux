@@ -83,13 +83,8 @@ static inline unsigned int avr32_get_chip_revision(struct avr32_cpuinfo *cpu)
 
 extern struct avr32_cpuinfo boot_cpu_data;
 
-#ifdef CONFIG_SMP
-extern struct avr32_cpuinfo cpu_data[];
-#define current_cpu_data cpu_data[smp_processor_id()]
-#else
-#define cpu_data (&boot_cpu_data)
+/* No SMP support so far */
 #define current_cpu_data boot_cpu_data
-#endif
 
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's
@@ -141,12 +136,6 @@ struct task_struct;
 
 /* Free all resources held by a thread */
 extern void release_thread(struct task_struct *);
-
-/* Create a kernel thread without removing it from tasklists */
-extern int kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
-
-/* Prepare to copy thread state - unlazy all lazy status */
-#define prepare_to_copy(tsk) do { } while(0)
 
 /* Return saved PC of a blocked thread */
 #define thread_saved_pc(tsk)    ((tsk)->thread.cpu_context.pc)

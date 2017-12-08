@@ -74,6 +74,47 @@ static int get_dep_lib_info(struct dcd_manager *hdcd_mgr,
 				   enum nldr_phase phase);
 
 /*
+ *  ======== dcd_uuid_from_string ========
+ *  Purpose:
+ *      Converts an ANSI string to a dsp_uuid.
+ *  Parameters:
+ *      sz_uuid:    Pointer to a string that represents a dsp_uuid object.
+ *      uuid_obj:      Pointer to a dsp_uuid object.
+ *  Returns:
+ *      0:        Success.
+ *      -EINVAL:  Coversion failed
+ *  Requires:
+ *      uuid_obj & sz_uuid are non-NULL values.
+ *  Ensures:
+ *  Details:
+ *      We assume the string representation of a UUID has the following format:
+ *      "12345678_1234_1234_1234_123456789abc".
+ */
+static int dcd_uuid_from_string(char *sz_uuid, struct dsp_uuid *uuid_obj)
+{
+	char c;
+	u64 t;
+	struct dsp_uuid uuid_tmp;
+
+	/*
+	 * sscanf implementation cannot deal with hh format modifier
+	 * if the converted value doesn't fit in u32. So, convert the
+	 * last six bytes to u64 and memcpy what is needed
+	 */
+	if (sscanf(sz_uuid, "%8x%c%4hx%c%4hx%c%2hhx%2hhx%c%llx",
+	       &uuid_tmp.data1, &c, &uuid_tmp.data2, &c,
+	       &uuid_tmp.data3, &c, &uuid_tmp.data4,
+	       &uuid_tmp.data5, &c, &t) != 10)
+		return -EINVAL;
+
+	t = cpu_to_be64(t);
+	memcpy(&uuid_tmp.data6[0], ((char *)&t) + 2, 6);
+	*uuid_obj = uuid_tmp;
+
+	return 0;
+}
+
+/*
  *  ======== dcd_auto_register ========
  *  Purpose:
  *      Parses the supplied image and resigsters with DCD.
@@ -253,14 +294,15 @@ int dcd_enumerate_object(s32 index, enum dsp_dcdobjtype obj_type,
 		if (!status) {
 			/* Create UUID value using string retrieved from
 			 * registry. */
-			uuid_uuid_from_string(sz_value, &dsp_uuid_obj);
+			status = dcd_uuid_from_string(sz_value, &dsp_uuid_obj);
 
-			*uuid_obj = dsp_uuid_obj;
+			if (!status) {
+				*uuid_obj = dsp_uuid_obj;
 
-			/* Increment enum_refs to update reference count. */
-			enum_refs++;
-
-			status = 0;
+				/* Increment enum_refs to update reference
+				 * count. */
+				enum_refs++;
+			}
 		} else if (status == -ENODATA) {
 			/* At the end of enumeration. Reset enum_refs. */
 			enum_refs = 0;
@@ -346,11 +388,13 @@ int dcd_get_object_def(struct dcd_manager *hdcd_mgr,
 	struct dcd_manager *dcd_mgr_obj = hdcd_mgr;	/* ptr to DCD mgr */
 	struct cod_libraryobj *lib = NULL;
 	int status = 0;
+	int len;
 	u32 ul_addr = 0;	/* Used by cod_get_section */
 	u32 ul_len = 0;		/* Used by cod_get_section */
 	u32 dw_buf_size;	/* Used by REG functions */
 	char sz_reg_key[DCD_MAXPATHLENGTH];
 	char *sz_uuid;		/*[MAXUUIDLEN]; */
+	char *tmp;
 	struct dcd_key_elem *dcd_key = NULL;
 	char sz_sect_name[MAXUUIDLEN + 2];	/* ".[UUID]\0" */
 	char *psz_coff_buf;
@@ -395,7 +439,7 @@ int dcd_get_object_def(struct dcd_manager *hdcd_mgr,
 		}
 
 		/* Create UUID value to set in registry. */
-		uuid_uuid_to_string(obj_uuid, sz_uuid, MAXUUIDLEN);
+		snprintf(sz_uuid, MAXUUIDLEN, "%pUL", obj_uuid);
 
 		if ((strlen(sz_reg_key) + MAXUUIDLEN) < DCD_MAXPATHLENGTH)
 			strncat(sz_reg_key, sz_uuid, MAXUUIDLEN);
@@ -429,12 +473,27 @@ int dcd_get_object_def(struct dcd_manager *hdcd_mgr,
 	}
 
 	/* Ensure sz_uuid + 1 is not greater than sizeof sz_sect_name. */
+	len = strlen(sz_uuid);
+	if (len + 1 > sizeof(sz_sect_name)) {
+		status = -EPERM;
+		goto func_end;
+	}
 
 	/* Create section name based on node UUID. A period is
 	 * pre-pended to the UUID string to form the section name.
 	 * I.e. ".24BC8D90_BB45_11d4_B756_006008BDB66F" */
+
+	len -= 4;	/* uuid has 4 delimiters '-' */
+	tmp = sz_uuid;
+
 	strncpy(sz_sect_name, ".", 2);
-	strncat(sz_sect_name, sz_uuid, strlen(sz_uuid));
+	do {
+		char *uuid = strsep(&tmp, "-");
+		if (!uuid)
+			break;
+		len -= strlen(uuid);
+		strncat(sz_sect_name, uuid, strlen(uuid) + 1);
+	} while (len && strncat(sz_sect_name, "_", 2));
 
 	/* Get section information. */
 	status = cod_get_section(lib, sz_sect_name, &ul_addr, &ul_len);
@@ -463,7 +522,7 @@ int dcd_get_object_def(struct dcd_manager *hdcd_mgr,
 	status = cod_read_section(lib, sz_sect_name, psz_coff_buf, ul_len);
 #endif
 	if (!status) {
-		/* Compres DSP buffer to conform to PC format. */
+		/* Compress DSP buffer to conform to PC format. */
 		if (strstr(dcd_key->path, "iva") == NULL) {
 			compress_buf(psz_coff_buf, ul_len, DSPWORDSIZE);
 		} else {
@@ -564,24 +623,28 @@ int dcd_get_objects(struct dcd_manager *hdcd_mgr,
 		psz_cur = psz_coff_buf;
 		while ((token = strsep(&psz_cur, seps)) && *token != '\0') {
 			/*  Retrieve UUID string. */
-			uuid_uuid_from_string(token, &dsp_uuid_obj);
+			status = dcd_uuid_from_string(token, &dsp_uuid_obj);
 
-			/*  Retrieve object type */
-			token = strsep(&psz_cur, seps);
+			if (!status) {
+				/*  Retrieve object type */
+				token = strsep(&psz_cur, seps);
 
-			/*  Retrieve object type */
-			object_type = atoi(token);
+				/*  Retrieve object type */
+				object_type = atoi(token);
 
-			/*
-			 *  Apply register_fxn to the found DCD object.
-			 *  Possible actions include:
-			 *
-			 *  1) Register found DCD object.
-			 *  2) Unregister found DCD object (when handle == NULL)
-			 *  3) Add overlay node.
-			 */
-			status =
-			    register_fxn(&dsp_uuid_obj, object_type, handle);
+				/*
+				*  Apply register_fxn to the found DCD object.
+				*  Possible actions include:
+				*
+				*  1) Register found DCD object.
+				*  2) Unregister found DCD object
+				*     (when handle == NULL)
+				*  3) Add overlay node.
+				*/
+				status =
+				    register_fxn(&dsp_uuid_obj, object_type,
+						 handle);
+			}
 			if (status) {
 				/* if error occurs, break from while loop. */
 				break;
@@ -666,7 +729,7 @@ int dcd_get_library_name(struct dcd_manager *hdcd_mgr,
 			status = -EPERM;
 		}
 		/* Create UUID value to find match in registry. */
-		uuid_uuid_to_string(uuid_obj, sz_uuid, MAXUUIDLEN);
+		snprintf(sz_uuid, MAXUUIDLEN, "%pUL", uuid_obj);
 		if ((strlen(sz_reg_key) + MAXUUIDLEN) < DCD_MAXPATHLENGTH)
 			strncat(sz_reg_key, sz_uuid, MAXUUIDLEN);
 		else
@@ -706,7 +769,7 @@ int dcd_get_library_name(struct dcd_manager *hdcd_mgr,
 		} else {
 			status = -EPERM;
 		}
-		uuid_uuid_to_string(uuid_obj, sz_uuid, MAXUUIDLEN);
+		snprintf(sz_uuid, MAXUUIDLEN, "%pUL", uuid_obj);
 		if ((strlen(sz_reg_key) + MAXUUIDLEN) < DCD_MAXPATHLENGTH)
 			strncat(sz_reg_key, sz_uuid, MAXUUIDLEN);
 		else
@@ -797,7 +860,7 @@ int dcd_register_object(struct dsp_uuid *uuid_obj,
 			status = -EPERM;
 
 		/* Create UUID value to set in registry. */
-		uuid_uuid_to_string(uuid_obj, sz_uuid, MAXUUIDLEN);
+		snprintf(sz_uuid, MAXUUIDLEN, "%pUL", uuid_obj);
 		if ((strlen(sz_reg_key) + MAXUUIDLEN) < DCD_MAXPATHLENGTH)
 			strncat(sz_reg_key, sz_uuid, MAXUUIDLEN);
 		else
@@ -835,8 +898,7 @@ int dcd_register_object(struct dsp_uuid *uuid_obj,
 				goto func_end;
 			}
 
-			dcd_key->path = kmalloc(strlen(sz_reg_key) + 1,
-								GFP_KERNEL);
+			dcd_key->path = kmalloc(dw_path_size, GFP_KERNEL);
 
 			if (!dcd_key->path) {
 				kfree(dcd_key);
@@ -985,9 +1047,12 @@ static int get_attrs_from_buf(char *psz_buf, u32 ul_buf_size,
 		token = strsep(&psz_cur, seps);
 
 		/* dsp_uuid ui_node_id */
-		uuid_uuid_from_string(token,
-				      &gen_obj->obj_data.node_obj.ndb_props.
-				      ui_node_id);
+		status = dcd_uuid_from_string(token,
+					      &gen_obj->obj_data.node_obj.
+					      ndb_props.ui_node_id);
+		if (status)
+			break;
+
 		token = strsep(&psz_cur, seps);
 
 		/* ac_name */
@@ -1384,9 +1449,12 @@ static int get_dep_lib_info(struct dcd_manager *hdcd_mgr,
 				break;
 			} else {
 				/* Retrieve UUID string. */
-				uuid_uuid_from_string(token,
-						      &(dep_lib_uuids
-							[dep_libs]));
+				status = dcd_uuid_from_string(token,
+							      &(dep_lib_uuids
+								[dep_libs]));
+				if (status)
+					break;
+
 				/* Is this library persistent? */
 				token = strsep(&psz_cur, seps);
 				prstnt_dep_libs[dep_libs] = atoi(token);

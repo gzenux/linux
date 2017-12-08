@@ -1,9 +1,9 @@
 /*
  * adm1029.c - Part of lm_sensors, Linux kernel modules for hardware monitoring
  *
- * Copyright (C) 2006 Corentin LABBE <corentin.labbe@geomatys.fr>
+ * Copyright (C) 2006 Corentin LABBE <clabbe.montjoie@gmail.com>
  *
- * Based on LM83 Driver by Jean Delvare <khali@linux-fr.org>
+ * Based on LM83 Driver by Jean Delvare <jdelvare@suse.de>
  *
  * Give only processor, motherboard temperatures and fan tachs
  * Very rare chip please let me know if you use it
@@ -224,12 +224,16 @@ static ssize_t set_fan_div(struct device *dev,
 		break;
 	default:
 		mutex_unlock(&data->update_lock);
-		dev_err(&client->dev, "fan_div value %ld not "
-			"supported. Choose one of 1, 2 or 4!\n", val);
+		dev_err(&client->dev,
+			"fan_div value %ld not supported. Choose one of 1, 2 or 4!\n",
+			val);
 		return -EINVAL;
 	}
 	/* Update the value */
 	reg = (reg & 0x3F) | (val << 6);
+
+	/* Update the cache */
+	data->fan_div[attr->index] = reg;
 
 	/* Write value */
 	i2c_smbus_write_byte_data(client,
@@ -326,8 +330,8 @@ static int adm1029_detect(struct i2c_client *client,
 		 * There are no "official" CHIP ID, so actually
 		 * we use Major/Minor revision for that
 		 */
-		pr_info("adm1029: Unknown major revision %x, "
-			"please let us know\n", chip_id);
+		pr_info("Unknown major revision %x, please let us know\n",
+			chip_id);
 		return -ENODEV;
 	}
 
@@ -342,11 +346,10 @@ static int adm1029_probe(struct i2c_client *client,
 	struct adm1029_data *data;
 	int err;
 
-	data = kzalloc(sizeof(struct adm1029_data), GFP_KERNEL);
-	if (!data) {
-		err = -ENOMEM;
-		goto exit;
-	}
+	data = devm_kzalloc(&client->dev, sizeof(struct adm1029_data),
+			    GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
 
 	i2c_set_clientdata(client, data);
 	mutex_init(&data->update_lock);
@@ -355,15 +358,13 @@ static int adm1029_probe(struct i2c_client *client,
 	 * Initialize the ADM1029 chip
 	 * Check config register
 	 */
-	if (adm1029_init_client(client) == 0) {
-		err = -ENODEV;
-		goto exit_free;
-	}
+	if (adm1029_init_client(client) == 0)
+		return -ENODEV;
 
 	/* Register sysfs hooks */
 	err = sysfs_create_group(&client->dev.kobj, &adm1029_group);
 	if (err)
-		goto exit_free;
+		return err;
 
 	data->hwmon_dev = hwmon_device_register(&client->dev);
 	if (IS_ERR(data->hwmon_dev)) {
@@ -375,9 +376,6 @@ static int adm1029_probe(struct i2c_client *client,
 
  exit_remove_files:
 	sysfs_remove_group(&client->dev.kobj, &adm1029_group);
- exit_free:
-	kfree(data);
- exit:
 	return err;
 }
 
@@ -405,7 +403,6 @@ static int adm1029_remove(struct i2c_client *client)
 	hwmon_device_unregister(data->hwmon_dev);
 	sysfs_remove_group(&client->dev.kobj, &adm1029_group);
 
-	kfree(data);
 	return 0;
 }
 
@@ -455,6 +452,6 @@ static struct adm1029_data *adm1029_update_device(struct device *dev)
 
 module_i2c_driver(adm1029_driver);
 
-MODULE_AUTHOR("Corentin LABBE <corentin.labbe@geomatys.fr>");
+MODULE_AUTHOR("Corentin LABBE <clabbe.montjoie@gmail.com>");
 MODULE_DESCRIPTION("adm1029 driver");
 MODULE_LICENSE("GPL v2");

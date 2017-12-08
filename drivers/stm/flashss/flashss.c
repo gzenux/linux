@@ -361,7 +361,7 @@ static void flashss_exit_debug_fs(void)
  * At this stage, the flashSS can only manage TOP configuration registers
  * and eMMC core / phy. Also it inits the debugFS if supported.
  */
-static int __devinit flashss_driver_probe(struct platform_device *pdev)
+static int flashss_driver_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct device *dev = &pdev->dev;

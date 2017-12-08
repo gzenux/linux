@@ -150,7 +150,7 @@ static int stm_keyscan_init_conf(struct device *dev,
 err:	return -EINVAL;
 }
 
-static int __devinit stm_keyscan_probe(struct platform_device *pdev)
+static int stm_keyscan_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct stm_plat_keyscan_data *pdata = dev->platform_data;
@@ -263,7 +263,7 @@ static int __devinit stm_keyscan_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int __devexit stm_keyscan_remove(struct platform_device *pdev)
+static int stm_keyscan_remove(struct platform_device *pdev)
 {
 	struct stm_keyscan_priv *priv = platform_get_drvdata(pdev);
 
@@ -313,7 +313,7 @@ static const struct of_device_id stm_keyscan_of_match[] = {
 
 struct platform_driver stm_keyscan_device_driver = {
 	.probe		= stm_keyscan_probe,
-	.remove		= __devexit_p(stm_keyscan_remove),
+	.remove		= stm_keyscan_remove,
 	.driver		= {
 		.name	= "stm-keyscan",
 		.pm	= &stm_keyscan_dev_pm_ops,

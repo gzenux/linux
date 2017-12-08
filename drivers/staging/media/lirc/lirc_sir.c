@@ -33,6 +33,8 @@
  *   parts cut'n'pasted from sa1100_ir.c (C) 2000 Russell King
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -52,6 +54,7 @@
 #include <linux/io.h>
 #include <asm/irq.h>
 #include <linux/fcntl.h>
+#include <linux/platform_device.h>
 #ifdef LIRC_ON_SA1100
 #include <asm/hardware.h>
 #ifdef CONFIG_SA1100_COLLIE
@@ -184,10 +187,10 @@ static bool debug;
 
 /* Communication with user-space */
 static unsigned int lirc_poll(struct file *file, poll_table *wait);
-static ssize_t lirc_read(struct file *file, char *buf, size_t count,
-		loff_t *ppos);
-static ssize_t lirc_write(struct file *file, const char *buf, size_t n,
-		loff_t *pos);
+static ssize_t lirc_read(struct file *file, char __user *buf, size_t count,
+			 loff_t *ppos);
+static ssize_t lirc_write(struct file *file, const char __user *buf, size_t n,
+			  loff_t *pos);
 static long lirc_ioctl(struct file *filep, unsigned int cmd, unsigned long arg);
 static void add_read_queue(int flag, unsigned long val);
 static int init_chrdev(void);
@@ -249,8 +252,8 @@ static unsigned int lirc_poll(struct file *file, poll_table *wait)
 	return 0;
 }
 
-static ssize_t lirc_read(struct file *file, char *buf, size_t count,
-		loff_t *ppos)
+static ssize_t lirc_read(struct file *file, char __user *buf, size_t count,
+			 loff_t *ppos)
 {
 	int n = 0;
 	int retval = 0;
@@ -263,9 +266,9 @@ static ssize_t lirc_read(struct file *file, char *buf, size_t count,
 	set_current_state(TASK_INTERRUPTIBLE);
 	while (n < count) {
 		if (rx_head != rx_tail) {
-			if (copy_to_user((void *) buf + n,
-					(void *) (rx_buf + rx_head),
-					sizeof(int))) {
+			if (copy_to_user(buf + n,
+					 rx_buf + rx_head,
+					 sizeof(int))) {
 				retval = -EFAULT;
 				break;
 			}
@@ -288,8 +291,8 @@ static ssize_t lirc_read(struct file *file, char *buf, size_t count,
 	set_current_state(TASK_RUNNING);
 	return n ? n : retval;
 }
-static ssize_t lirc_write(struct file *file, const char *buf, size_t n,
-				loff_t *pos)
+static ssize_t lirc_write(struct file *file, const char __user *buf, size_t n,
+			  loff_t *pos)
 {
 	unsigned long flags;
 	int i, count;
@@ -335,8 +338,9 @@ static ssize_t lirc_write(struct file *file, const char *buf, size_t n,
 
 static long lirc_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
+	u32 __user *uptr = (u32 __user *)arg;
 	int retval = 0;
-	__u32 value = 0;
+	u32 value = 0;
 #ifdef LIRC_ON_SA1100
 
 	if (cmd == LIRC_GET_FEATURES)
@@ -361,16 +365,16 @@ static long lirc_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	case LIRC_GET_FEATURES:
 	case LIRC_GET_SEND_MODE:
 	case LIRC_GET_REC_MODE:
-		retval = put_user(value, (__u32 *) arg);
+		retval = put_user(value, uptr);
 		break;
 
 	case LIRC_SET_SEND_MODE:
 	case LIRC_SET_REC_MODE:
-		retval = get_user(value, (__u32 *) arg);
+		retval = get_user(value, uptr);
 		break;
 #ifdef LIRC_ON_SA1100
 	case LIRC_SET_SEND_DUTY_CYCLE:
-		retval = get_user(value, (__u32 *) arg);
+		retval = get_user(value, uptr);
 		if (retval)
 			return retval;
 		if (value <= 0 || value > 100)
@@ -385,7 +389,7 @@ static long lirc_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			space_width -= LIRC_ON_SA1100_TRANSMITTER_LATENCY;
 		break;
 	case LIRC_SET_SEND_CARRIER:
-		retval = get_user(value, (__u32 *) arg);
+		retval = get_user(value, uptr);
 		if (retval)
 			return retval;
 		if (value > 500000 || value < 20000)
@@ -487,12 +491,14 @@ static struct lirc_driver driver = {
 	.owner		= THIS_MODULE,
 };
 
+static struct platform_device *lirc_sir_dev;
 
 static int init_chrdev(void)
 {
+	driver.dev = &lirc_sir_dev->dev;
 	driver.minor = lirc_register_driver(&driver);
 	if (driver.minor < 0) {
-		printk(KERN_ERR LIRC_DRIVER_NAME ": init_chrdev() failed.\n");
+		pr_err("init_chrdev() failed.\n");
 		return -EIO;
 	}
 	return 0;
@@ -601,7 +607,7 @@ static irqreturn_t sir_interrupt(int irq, void *dev_id)
 	}
 
 	if (status & UTSR0_TFS)
-		printk(KERN_ERR "transmit fifo not full, shouldn't happen\n");
+		pr_err("transmit fifo not full, shouldn't happen\n");
 
 	/* We must clear certain bits. */
 	status &= (UTSR0_RID | UTSR0_RBB | UTSR0_REB);
@@ -782,12 +788,6 @@ static int init_hardware(void)
 	spin_lock_irqsave(&hardware_lock, flags);
 	/* reset UART */
 #ifdef LIRC_ON_SA1100
-#ifdef CONFIG_SA1100_BITSY
-	if (machine_is_bitsy()) {
-		printk(KERN_INFO "Power on IR module\n");
-		set_bitsy_egpio(EGPIO_BITSY_IR_ON);
-	}
-#endif
 #ifdef CONFIG_SA1100_COLLIE
 	sa1100_irda_set_power_collie(3);	/* power on */
 #endif
@@ -882,8 +882,7 @@ static int init_hardware(void)
 	udelay(1500);
 
 	/* read previous control byte */
-	printk(KERN_INFO LIRC_DRIVER_NAME
-	       ": 0x%02x\n", sinp(UART_RX));
+	pr_info("0x%02x\n", sinp(UART_RX));
 
 	/* Set DLAB 1. */
 	soutp(UART_LCR, sinp(UART_LCR) | UART_LCR_DLAB);
@@ -938,10 +937,6 @@ static void drop_hardware(void)
 	Ser2UTCR3 = sr.utcr3;
 
 	Ser2HSCR0 = sr.hscr0;
-#ifdef CONFIG_SA1100_BITSY
-	if (machine_is_bitsy())
-		clr_bitsy_egpio(EGPIO_BITSY_IR_ON);
-#endif
 #ifdef CONFIG_SA1100_COLLIE
 	sa1100_irda_set_power_collie(0);	/* power off */
 #endif
@@ -961,8 +956,7 @@ static int init_port(void)
 	/* get I/O port access and IRQ line */
 #ifndef LIRC_ON_SA1100
 	if (request_region(io, 8, LIRC_DRIVER_NAME) == NULL) {
-		printk(KERN_ERR LIRC_DRIVER_NAME
-		       ": i/o port 0x%.4x already in use.\n", io);
+		pr_err("i/o port 0x%.4x already in use.\n", io);
 		return -EBUSY;
 	}
 #endif
@@ -972,15 +966,11 @@ static int init_port(void)
 #               ifndef LIRC_ON_SA1100
 		release_region(io, 8);
 #               endif
-		printk(KERN_ERR LIRC_DRIVER_NAME
-			": IRQ %d already in use.\n",
-			irq);
+		pr_err("IRQ %d already in use.\n", irq);
 		return retval;
 	}
 #ifndef LIRC_ON_SA1100
-	printk(KERN_INFO LIRC_DRIVER_NAME
-		": I/O port 0x%.4x, IRQ %d.\n",
-		io, irq);
+	pr_info("I/O port 0x%.4x, IRQ %d.\n", io, irq);
 #endif
 
 	init_timer(&timerlist);
@@ -1210,25 +1200,72 @@ static int init_lirc_sir(void)
 	if (retval < 0)
 		return retval;
 	init_hardware();
-	printk(KERN_INFO LIRC_DRIVER_NAME
-		": Installed.\n");
+	pr_info("Installed.\n");
 	return 0;
 }
 
+static int lirc_sir_probe(struct platform_device *dev)
+{
+	return 0;
+}
+
+static int lirc_sir_remove(struct platform_device *dev)
+{
+	return 0;
+}
+
+static struct platform_driver lirc_sir_driver = {
+	.probe		= lirc_sir_probe,
+	.remove		= lirc_sir_remove,
+	.driver		= {
+		.name	= "lirc_sir",
+		.owner	= THIS_MODULE,
+	},
+};
 
 static int __init lirc_sir_init(void)
 {
 	int retval;
 
+	retval = platform_driver_register(&lirc_sir_driver);
+	if (retval) {
+		pr_err("Platform driver register failed!\n");
+		return -ENODEV;
+	}
+
+	lirc_sir_dev = platform_device_alloc("lirc_dev", 0);
+	if (!lirc_sir_dev) {
+		pr_err("Platform device alloc failed!\n");
+		retval = -ENOMEM;
+		goto pdev_alloc_fail;
+	}
+
+	retval = platform_device_add(lirc_sir_dev);
+	if (retval) {
+		pr_err("Platform device add failed!\n");
+		retval = -ENODEV;
+		goto pdev_add_fail;
+	}
+
 	retval = init_chrdev();
 	if (retval < 0)
-		return retval;
+		goto fail;
+
 	retval = init_lirc_sir();
 	if (retval) {
 		drop_chrdev();
-		return retval;
+		goto fail;
 	}
+
 	return 0;
+
+fail:
+	platform_device_del(lirc_sir_dev);
+pdev_add_fail:
+	platform_device_put(lirc_sir_dev);
+pdev_alloc_fail:
+	platform_driver_unregister(&lirc_sir_driver);
+	return retval;
 }
 
 static void __exit lirc_sir_exit(void)
@@ -1236,7 +1273,9 @@ static void __exit lirc_sir_exit(void)
 	drop_hardware();
 	drop_chrdev();
 	drop_port();
-	printk(KERN_INFO LIRC_DRIVER_NAME ": Uninstalled.\n");
+	platform_device_unregister(lirc_sir_dev);
+	platform_driver_unregister(&lirc_sir_driver);
+	pr_info("Uninstalled.\n");
 }
 
 module_init(lirc_sir_init);

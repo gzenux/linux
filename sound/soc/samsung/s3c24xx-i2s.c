@@ -23,18 +23,19 @@
 #include <sound/soc.h>
 #include <sound/pcm_params.h>
 
-#include <mach/regs-gpio.h>
 #include <mach/dma.h>
-#include <plat/regs-iis.h>
+#include <mach/gpio-samsung.h>
+#include <plat/gpio-cfg.h>
+#include "regs-iis.h"
 
 #include "dma.h"
 #include "s3c24xx-i2s.h"
 
-static struct s3c2410_dma_client s3c24xx_dma_client_out = {
+static struct s3c_dma_client s3c24xx_dma_client_out = {
 	.name = "I2S PCM Stereo out"
 };
 
-static struct s3c2410_dma_client s3c24xx_dma_client_in = {
+static struct s3c_dma_client s3c24xx_dma_client_in = {
 	.name = "I2S PCM Stereo in"
 };
 
@@ -247,12 +248,12 @@ static int s3c24xx_i2s_hw_params(struct snd_pcm_substream *substream,
 	iismod = readl(s3c24xx_i2s.regs + S3C2410_IISMOD);
 	pr_debug("hw_params r: IISMOD: %x\n", iismod);
 
-	switch (params_format(params)) {
-	case SNDRV_PCM_FORMAT_S8:
+	switch (params_width(params)) {
+	case 8:
 		iismod &= ~S3C2410_IISMOD_16BIT;
 		dma_data->dma_size = 1;
 		break;
-	case SNDRV_PCM_FORMAT_S16_LE:
+	case 16:
 		iismod |= S3C2410_IISMOD_16BIT;
 		dma_data->dma_size = 2;
 		break;
@@ -391,12 +392,9 @@ static int s3c24xx_i2s_probe(struct snd_soc_dai *dai)
 	}
 	clk_enable(s3c24xx_i2s.iis_clk);
 
-	/* Configure the I2S pins in correct mode */
-	s3c2410_gpio_cfgpin(S3C2410_GPE0, S3C2410_GPE0_I2SLRCK);
-	s3c2410_gpio_cfgpin(S3C2410_GPE1, S3C2410_GPE1_I2SSCLK);
-	s3c2410_gpio_cfgpin(S3C2410_GPE2, S3C2410_GPE2_CDCLK);
-	s3c2410_gpio_cfgpin(S3C2410_GPE3, S3C2410_GPE3_I2SSDI);
-	s3c2410_gpio_cfgpin(S3C2410_GPE4, S3C2410_GPE4_I2SSDO);
+	/* Configure the I2S pins (GPE0...GPE4) in correct mode */
+	s3c_gpio_cfgall_range(S3C2410_GPE(0), 5, S3C_GPIO_SFN(2),
+			      S3C_GPIO_PULL_NONE);
 
 	writel(S3C2410_IISCON_IISEN, s3c24xx_i2s.regs + S3C2410_IISCON);
 
@@ -469,20 +467,30 @@ static struct snd_soc_dai_driver s3c24xx_i2s_dai = {
 	.ops = &s3c24xx_i2s_dai_ops,
 };
 
-static __devinit int s3c24xx_iis_dev_probe(struct platform_device *pdev)
-{
-	return snd_soc_register_dai(&pdev->dev, &s3c24xx_i2s_dai);
-}
+static const struct snd_soc_component_driver s3c24xx_i2s_component = {
+	.name		= "s3c24xx-i2s",
+};
 
-static __devexit int s3c24xx_iis_dev_remove(struct platform_device *pdev)
+static int s3c24xx_iis_dev_probe(struct platform_device *pdev)
 {
-	snd_soc_unregister_dai(&pdev->dev);
-	return 0;
+	int ret = 0;
+
+	ret = devm_snd_soc_register_component(&pdev->dev,
+			&s3c24xx_i2s_component, &s3c24xx_i2s_dai, 1);
+	if (ret) {
+		pr_err("failed to register the dai\n");
+		return ret;
+	}
+
+	ret = samsung_asoc_dma_platform_register(&pdev->dev);
+	if (ret)
+		pr_err("failed to register the dma: %d\n", ret);
+
+	return ret;
 }
 
 static struct platform_driver s3c24xx_iis_driver = {
 	.probe  = s3c24xx_iis_dev_probe,
-	.remove = __devexit_p(s3c24xx_iis_dev_remove),
 	.driver = {
 		.name = "s3c24xx-iis",
 		.owner = THIS_MODULE,

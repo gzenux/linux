@@ -1193,7 +1193,7 @@ static int ir_stm_probe(struct platform_device *pdev)
 		ret = ir_stm_hardware_init(ir_dev);
 
 		rdev->driver_type = RC_DRIVER_IR_RAW;
-		rdev->allowed_protos = RC_TYPE_ALL;
+		rdev->allowed_protocols[RC_FILTER_NORMAL] = RC_BIT_ALL;
 		rdev->priv = ir_dev;
 		rdev->open = stm_ir_open;
 		rdev->close = stm_ir_close;

@@ -73,7 +73,7 @@ static void *stm_temp_get_pdata(struct platform_device *pdev)
 
 	return data;
 }
-static int __devinit stm_temp_probe(struct platform_device *pdev)
+static int stm_temp_probe(struct platform_device *pdev)
 {
 	struct stm_temp_sensor *sensor = platform_get_drvdata(pdev);
 	struct plat_stm_temp_data *plat_data;
@@ -122,7 +122,7 @@ static int __devinit stm_temp_probe(struct platform_device *pdev)
 
 }
 
-static int __devexit stm_temp_remove(struct platform_device *pdev)
+static int stm_temp_remove(struct platform_device *pdev)
 {
 	struct stm_temp_sensor *sensor = platform_get_drvdata(pdev);
 	stm_device_power(sensor->device_state, stm_device_power_off);

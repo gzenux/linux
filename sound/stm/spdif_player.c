@@ -676,12 +676,16 @@ static int snd_stm_spdif_player_start(struct snd_pcm_substream *substream)
 {
 	struct snd_stm_spdif_player *spdif_player =
 			snd_pcm_substream_chip(substream);
+	enum dma_ctrl_flags flags = DMA_CTRL_ACK;
 
 	snd_stm_printd(1, "snd_stm_spdif_player_start(substream=0x%p)\n",
 			substream);
 
 	BUG_ON(!spdif_player);
 	BUG_ON(!snd_stm_magic_valid(spdif_player));
+
+	if (!substream->runtime->no_period_wakeup)
+		flags |= DMA_PREP_INTERRUPT;
 
 	/* Un-reset SPDIF player */
 
@@ -690,11 +694,10 @@ static int snd_stm_spdif_player_start(struct snd_pcm_substream *substream)
 	/* Prepare the DMA descriptor */
 
 	BUG_ON(!spdif_player->dma_channel->device->device_prep_dma_cyclic);
-	spdif_player->dma_descriptor =
-		spdif_player->dma_channel->device->device_prep_dma_cyclic(
+	spdif_player->dma_descriptor = dmaengine_prep_dma_cyclic(
 			spdif_player->dma_channel, substream->runtime->dma_addr,
 			spdif_player->buffer_bytes, spdif_player->period_bytes,
-			DMA_MEM_TO_DEV, NULL);
+			DMA_MEM_TO_DEV, flags);
 	if (!spdif_player->dma_descriptor) {
 		snd_stm_printe("Failed to prepare DMA descriptor\n");
 		return -ENOMEM;

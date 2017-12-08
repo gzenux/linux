@@ -634,7 +634,7 @@ static int n25q_config(struct stm_spi_fsm *fsm, struct flash_info *info);
 static int mx25_config(struct stm_spi_fsm *fsm, struct flash_info *info);
 static int s25fl_config(struct stm_spi_fsm *fsm, struct flash_info *info);
 
-static struct flash_info __devinitdata flash_types[] = {
+static struct flash_info flash_types[] = {
 
 	/* ST Microelectronics/Numonyx --
 	 * (newer production versions may have feature updates (eg faster
@@ -3156,7 +3156,7 @@ static int cmp_flash_info_readid_len(const void *a, const void *b)
 		((struct flash_info *)a)->readid_len;
 }
 
-static struct flash_info *__devinit fsm_jedec_probe(struct stm_spi_fsm *fsm)
+static struct flash_info *fsm_jedec_probe(struct stm_spi_fsm *fsm)
 {
 	uint8_t	readid[MAX_READID_LEN];
 	char readid_str[MAX_READID_LEN * 3 + 1];
@@ -3262,7 +3262,7 @@ static void *stm_fsm_dt_get_pdata(struct platform_device *pdev)
 /*
  * STM SPI FSM driver setup
  */
-static int __devinit stm_spi_fsm_probe(struct platform_device *pdev)
+static int stm_spi_fsm_probe(struct platform_device *pdev)
 {
 	struct stm_plat_spifsm_data *data;
 	struct stm_spi_fsm *fsm;
@@ -3471,7 +3471,7 @@ static int __devinit stm_spi_fsm_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int __devexit stm_spi_fsm_remove(struct platform_device *pdev)
+static int stm_spi_fsm_remove(struct platform_device *pdev)
 {
 	struct stm_spi_fsm *fsm = platform_get_drvdata(pdev);
 	int err;

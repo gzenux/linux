@@ -42,7 +42,6 @@ void stub_enqueue_ret_unlink(struct stub_device *sdev, __u32 seqnum,
 
 	unlink = kzalloc(sizeof(struct stub_unlink), GFP_ATOMIC);
 	if (!unlink) {
-		dev_err(&sdev->interface->dev, "alloc stub_unlink\n");
 		usbip_event_add(&sdev->ud, VDEV_EVENT_ERROR_MALLOC);
 		return;
 	}
@@ -75,12 +74,12 @@ void stub_complete(struct urb *urb)
 		/* OK */
 		break;
 	case -ENOENT:
-		dev_info(&urb->dev->dev, "stopped by a call to usb_kill_urb() "
-			 "because of cleaning up a virtual connection\n");
+		dev_info(&urb->dev->dev,
+			 "stopped by a call to usb_kill_urb() because of cleaning up a virtual connection\n");
 		return;
 	case -ECONNRESET:
-		dev_info(&urb->dev->dev, "unlinked by a call to "
-			 "usb_unlink_urb()\n");
+		dev_info(&urb->dev->dev,
+			 "unlinked by a call to usb_unlink_urb()\n");
 		break;
 	case -EPIPE:
 		dev_info(&urb->dev->dev, "endpoint %d is stalled\n",
@@ -90,8 +89,9 @@ void stub_complete(struct urb *urb)
 		dev_info(&urb->dev->dev, "device removed?\n");
 		break;
 	default:
-		dev_info(&urb->dev->dev, "urb completion with non-zero status "
-			 "%d\n", urb->status);
+		dev_info(&urb->dev->dev,
+			 "urb completion with non-zero status %d\n",
+			 urb->status);
 		break;
 	}
 
@@ -166,7 +166,7 @@ static int stub_send_ret_submit(struct stub_device *sdev)
 		int ret;
 		struct urb *urb = priv->urb;
 		struct usbip_header pdu_header;
-		void *iso_buffer = NULL;
+		struct usbip_iso_packet_descriptor *iso_buffer = NULL;
 		struct kvec *iov = NULL;
 		int iovnum = 0;
 
@@ -179,7 +179,7 @@ static int stub_send_ret_submit(struct stub_device *sdev)
 		else
 			iovnum = 2;
 
-		iov = kzalloc(iovnum * sizeof(struct kvec), GFP_KERNEL);
+		iov = kcalloc(iovnum, sizeof(struct kvec), GFP_KERNEL);
 
 		if (!iov) {
 			usbip_event_add(&sdev->ud, SDEV_EVENT_ERROR_MALLOC);
@@ -192,7 +192,6 @@ static int stub_send_ret_submit(struct stub_device *sdev)
 		setup_ret_submit_pdu(&pdu_header, urb);
 		usbip_dbg_stub_tx("setup txdata seqnum: %d urb: %p\n",
 				  pdu_header.base.seqnum, urb);
-		/*usbip_dump_header(pdu_header);*/
 		usbip_header_correct_endian(&pdu_header, 1);
 
 		iov[iovnum].iov_base = &pdu_header;
@@ -219,6 +218,7 @@ static int stub_send_ret_submit(struct stub_device *sdev)
 			 */
 
 			int i;
+
 			for (i = 0; i < urb->number_of_packets; i++) {
 				iov[iovnum].iov_base = urb->transfer_buffer +
 					urb->iso_frame_desc[i].offset;
@@ -230,8 +230,7 @@ static int stub_send_ret_submit(struct stub_device *sdev)
 
 			if (txsize != sizeof(pdu_header) + urb->actual_length) {
 				dev_err(&sdev->interface->dev,
-					"actual length of urb %d does not "
-					"match iso packet sizes %zu\n",
+					"actual length of urb %d does not match iso packet sizes %zu\n",
 					urb->actual_length,
 					txsize-sizeof(pdu_header));
 				kfree(iov);

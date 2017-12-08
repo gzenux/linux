@@ -559,12 +559,16 @@ static int snd_stm_pcm_reader_start(struct snd_pcm_substream *substream)
 {
 	struct snd_stm_pcm_reader *pcm_reader =
 			snd_pcm_substream_chip(substream);
+	enum dma_ctrl_flags flags = DMA_CTRL_ACK;
 
 	snd_stm_printd(1, "snd_stm_pcm_reader_start(substream=0x%p)\n",
 			substream);
 
 	BUG_ON(!pcm_reader);
 	BUG_ON(!snd_stm_magic_valid(pcm_reader));
+
+	if (!substream->runtime->no_period_wakeup)
+		flags |= DMA_PREP_INTERRUPT;
 
 	/* Un-reset PCM reader */
 
@@ -573,11 +577,10 @@ static int snd_stm_pcm_reader_start(struct snd_pcm_substream *substream)
 	/* Prepare the DMA descriptor */
 
 	BUG_ON(!pcm_reader->dma_channel->device->device_prep_dma_cyclic);
-	pcm_reader->dma_descriptor =
-		pcm_reader->dma_channel->device->device_prep_dma_cyclic(
+	pcm_reader->dma_descriptor = dmaengine_prep_dma_cyclic(
 			pcm_reader->dma_channel, substream->runtime->dma_addr,
 			pcm_reader->buffer_bytes, pcm_reader->period_bytes,
-			DMA_DEV_TO_MEM, NULL);
+			DMA_DEV_TO_MEM, flags);
 	if (!pcm_reader->dma_descriptor) {
 		snd_stm_printe("Failed to prepare DMA descriptor\n");
 		return -ENOMEM;

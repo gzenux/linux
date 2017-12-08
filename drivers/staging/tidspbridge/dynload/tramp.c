@@ -81,7 +81,7 @@ static u8 priv_h2a(u8 value)
  * Description: Generate a trampoline symbol name (ASCII) using the value
  *	  of the symbol.  This places the new name into the user buffer.
  *	  The name is fixed in length and of the form: __$dbTR__xxxxxxxx
- *	  (where "xxxxxxxx" is the hex value.
+ *	  (where "xxxxxxxx" is the hex value).
  */
 static void priv_tramp_sym_gen_name(u32 value, char *dst)
 {
@@ -414,7 +414,7 @@ static int priv_tramp_sym_finalize(struct dload_state *dlthis)
 			/*  Copy the symbol contents into the flat table */
 			*new_sym = cur_sym->sym_info;
 
-			/*  Now finaize the symbol.  If it is in the tramp
+			/*  Now finalize the symbol.  If it is in the tramp
 			 * section, we need to adjust for the section start.
 			 * If it is external then we don't need to adjust at
 			 * all.
@@ -503,7 +503,7 @@ static int priv_tgt_img_gen(struct dload_state *dlthis, u32 base,
  *	  TRAMPOLINES ARE TREATED AS 2ND PASS even though this is really
  *	  the first (and only) relocation that will be performed on them.
  */
-static int priv_pkt_relo(struct dload_state *dlthis, tgt_au_t * data,
+static int priv_pkt_relo(struct dload_state *dlthis, tgt_au_t *data,
 			 struct reloc_record_t *rp[], u32 relo_count)
 {
 	int ret_val = 1;
@@ -773,7 +773,7 @@ static int priv_img_pkt_dup(struct dload_state *dlthis,
 	int ret_val = 0;
 	struct tramp_img_dup_relo *dup_relo = NULL;
 
-	/*  Determinne if this image packet is already being tracked in the
+	/*  Determine if this image packet is already being tracked in the
 	   dup list for other trampolines. */
 	dup_pkt = priv_dup_find(dlthis, secnn, image_offset);
 
@@ -998,7 +998,7 @@ int dload_tramp_generate(struct dload_state *dlthis, s16 secnn,
 /*
  * Function:	dload_tramp_pkt_update
  * Description: Update the duplicate copy of this image packet, which the
- *	  trampoline layer is already tracking.  This is call is critical
+ *	  trampoline layer is already tracking.  This call is critical
  *	  to make if trampolines were generated anywhere within the
  *	  packet and first pass relo continued on the remainder.  The
  *	  trampoline layer needs the updates image data so when 2nd

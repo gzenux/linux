@@ -213,7 +213,7 @@ static struct ahci_platform_data ahci_stm_platform_data = {
 #endif
 };
 
-static int __devinit ahci_stm_driver_probe(struct platform_device *pdev)
+static int ahci_stm_driver_probe(struct platform_device *pdev)
 {
 	struct ahci_stm_drv_data *drv_data;
 	struct device *dev = &pdev->dev;

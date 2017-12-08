@@ -1202,7 +1202,7 @@ void *stm_sata_of_get_pdata(struct platform_device *pdev)
 	return data;
 }
 
-static int __devinit stm_sata_probe(struct platform_device *pdev)
+static int stm_sata_probe(struct platform_device *pdev)
 {
 	struct stm_plat_sata_data *sata_private_info;
 	struct device *dev = &pdev->dev;

@@ -91,7 +91,7 @@ static const struct dev_pm_ops snd_stm_stxh205_pm_ops;
  * Driver functions.
  */
 
-static int __devinit snd_stm_stxh205_probe(struct platform_device *pdev)
+static int snd_stm_stxh205_probe(struct platform_device *pdev)
 {
 	int result;
 	struct stm_pad_state *pad_state;
@@ -132,7 +132,7 @@ error_soc_type:
 	return result;
 }
 
-static int __devexit snd_stm_stxh205_remove(struct platform_device *pdev)
+static int snd_stm_stxh205_remove(struct platform_device *pdev)
 {
 	struct stm_pad_state *pad_state = dev_get_drvdata(&pdev->dev);
 

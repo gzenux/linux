@@ -98,8 +98,7 @@
  ******************************************************************************/
 
 /* A matrix which maps channels to frequencies */
-#define MAX_CHAN_FREQ_MAP_ENTRIES   50
-static const long chan_freq_list[][MAX_CHAN_FREQ_MAP_ENTRIES] =
+static const long chan_freq_list[][2] =
 {
     {1,2412},
     {2,2417},
@@ -128,13 +127,6 @@ static const long chan_freq_list[][MAX_CHAN_FREQ_MAP_ENTRIES] =
     {157,5785},
     {161,5805}
 };
-
-#if DBG
-extern dbg_info_t *DbgInfo;
-#endif  /* DBG */
-
-
-
 
 /*******************************************************************************
  *	dbm()
@@ -166,43 +158,6 @@ int dbm( int value )
     return ( value - HCF_0DBM_OFFSET );
 } // dbm
 /*============================================================================*/
-
-
-
-
-/*******************************************************************************
- *	percent()
- *******************************************************************************
- *
- *  DESCRIPTION:
- *
- *      Return a value as a percentage of min to max.
- *
- *  PARAMETERS:
- *
- *      value   - the value in question
- *      min     - the minimum range value
- *      max     - the maximum range value
- *
- *  RETURNS:
- *
- *      the percentage value
- *
- ******************************************************************************/
-int percent( int value, int min, int max )
-{
-    /* Truncate the value to be between min and max. */
-    if( value < min )
-        value = min;
-
-    if( value > max )
-        value = max;
-
-    /* Return the value as a percentage of min to max. */
-    return ((( value - min ) * 100 ) / ( max - min ));
-} // percent
-/*============================================================================*/
-
 
 
 
@@ -482,10 +437,6 @@ void wl_hcf_error( struct net_device *dev, int hcfStatus )
  ******************************************************************************/
 void wl_endian_translate_event( ltv_t *pLtv )
 {
-    DBG_FUNC( "wl_endian_translate_event" );
-    DBG_ENTER( DbgInfo );
-
-
     switch( pLtv->typ ) {
     case CFG_TALLIES:
         break;
@@ -583,9 +534,6 @@ void wl_endian_translate_event( ltv_t *pLtv )
     default:
         break;
     }
-
-    DBG_LEAVE( DbgInfo );
-    return;
 } // wl_endian_translate_event
 /*============================================================================*/
 
@@ -846,7 +794,7 @@ int wl_is_a_valid_chan( int channel )
     }
 
     /* Iterate through the matrix and retrieve the frequency */
-    for( i = 0; i < MAX_CHAN_FREQ_MAP_ENTRIES; i++ ) {
+    for( i = 0; i < ARRAY_SIZE(chan_freq_list); i++ ) {
         if( chan_freq_list[i][0] == channel ) {
             return 1;
         }
@@ -884,7 +832,7 @@ int wl_is_a_valid_freq( long frequency )
 
 
     /* Iterate through the matrix and retrieve the channel */
-    for( i = 0; i < MAX_CHAN_FREQ_MAP_ENTRIES; i++ ) {
+    for( i = 0; i < ARRAY_SIZE(chan_freq_list); i++ ) {
         if( chan_freq_list[i][1] == frequency ) {
             return 1;
         }
@@ -927,7 +875,7 @@ long wl_get_freq_from_chan( int channel )
     }
 
     /* Iterate through the matrix and retrieve the frequency */
-    for( i = 0; i < MAX_CHAN_FREQ_MAP_ENTRIES; i++ ) {
+    for( i = 0; i < ARRAY_SIZE(chan_freq_list); i++ ) {
         if( chan_freq_list[i][0] == channel ) {
             return chan_freq_list[i][1];
         }
@@ -965,7 +913,7 @@ int wl_get_chan_from_freq( long frequency )
 
 
     /* Iterate through the matrix and retrieve the channel */
-    for( i = 0; i < MAX_CHAN_FREQ_MAP_ENTRIES; i++ ) {
+    for( i = 0; i < ARRAY_SIZE(chan_freq_list); i++ ) {
         if( chan_freq_list[i][1] == frequency ) {
             return chan_freq_list[i][0];
         }
@@ -998,10 +946,6 @@ int wl_get_chan_from_freq( long frequency )
 void wl_process_link_status( struct wl_private *lp )
 {
     hcf_16 link_stat;
-    /*------------------------------------------------------------------------*/
-
-    DBG_FUNC( "wl_process_link_status" );
-    DBG_ENTER( DbgInfo );
 
     if( lp != NULL ) {
         //link_stat = lp->hcfCtx.IFB_DSLinkStat & CFG_LINK_STAT_FW;
@@ -1028,8 +972,6 @@ void wl_process_link_status( struct wl_private *lp )
             break;
         }
     }
-    DBG_LEAVE( DbgInfo );
-    return;
 } // wl_process_link_status
 /*============================================================================*/
 
@@ -1059,12 +1001,6 @@ void wl_process_probe_response( struct wl_private *lp )
     PROBE_RESP  *probe_rsp;
     hcf_8       *wpa_ie = NULL;
     hcf_16      wpa_ie_len = 0;
-    /*------------------------------------------------------------------------*/
-
-
-    DBG_FUNC( "wl_process_probe_response" );
-    DBG_ENTER( DbgInfo );
-
 
     if( lp != NULL ) {
         probe_rsp = (PROBE_RESP *)&lp->ProbeResp;
@@ -1236,9 +1172,6 @@ void wl_process_probe_response( struct wl_private *lp )
             }
         }
     }
-
-    DBG_LEAVE( DbgInfo );
-    return;
 } // wl_process_probe_response
 /*============================================================================*/
 
@@ -1264,10 +1197,6 @@ void wl_process_probe_response( struct wl_private *lp )
  ******************************************************************************/
 void wl_process_updated_record( struct wl_private *lp )
 {
-    DBG_FUNC( "wl_process_updated_record" );
-    DBG_ENTER( DbgInfo );
-
-
     if( lp != NULL ) {
         lp->updatedRecord.u.u16[0] = CNV_LITTLE_TO_INT( lp->updatedRecord.u.u16[0] );
 
@@ -1287,9 +1216,6 @@ void wl_process_updated_record( struct wl_private *lp )
                        lp->updatedRecord.u.u16[0] );
         }
     }
-
-    DBG_LEAVE( DbgInfo );
-    return;
 } // wl_process_updated_record
 /*============================================================================*/
 
@@ -1316,12 +1242,6 @@ void wl_process_updated_record( struct wl_private *lp )
 void wl_process_assoc_status( struct wl_private *lp )
 {
     ASSOC_STATUS_STRCT *assoc_stat;
-    /*------------------------------------------------------------------------*/
-
-
-    DBG_FUNC( "wl_process_assoc_status" );
-    DBG_ENTER( DbgInfo );
-
 
     if( lp != NULL ) {
         assoc_stat = (ASSOC_STATUS_STRCT *)&lp->assoc_stat;
@@ -1354,9 +1274,6 @@ void wl_process_assoc_status( struct wl_private *lp )
 			assoc_stat->oldApAddr);
         }
     }
-
-    DBG_LEAVE( DbgInfo );
-    return;
 } // wl_process_assoc_status
 /*============================================================================*/
 
@@ -1383,12 +1300,6 @@ void wl_process_assoc_status( struct wl_private *lp )
 void wl_process_security_status( struct wl_private *lp )
 {
     SECURITY_STATUS_STRCT *sec_stat;
-    /*------------------------------------------------------------------------*/
-
-
-    DBG_FUNC( "wl_process_security_status" );
-    DBG_ENTER( DbgInfo );
-
 
     if( lp != NULL ) {
         sec_stat = (SECURITY_STATUS_STRCT *)&lp->sec_stat;
@@ -1426,9 +1337,6 @@ void wl_process_security_status( struct wl_private *lp )
 	DBG_TRACE(DbgInfo, "Reason          : 0x%04x\n", sec_stat->reason);
 
     }
-
-    DBG_LEAVE( DbgInfo );
-    return;
 } // wl_process_security_status
 /*============================================================================*/
 
@@ -1438,9 +1346,6 @@ int wl_get_tallies(struct wl_private *lp,
     int ret = 0;
     int status;
     CFG_HERMES_TALLIES_STRCT *pTallies;
-
-    DBG_FUNC( "wl_get_tallies" );
-    DBG_ENTER(DbgInfo);
 
     /* Get the current tallies from the adapter */
     lp->ltvRecord.len = 1 + HCF_TOT_TAL_CNT * sizeof(hcf_16);
@@ -1456,8 +1361,6 @@ int wl_get_tallies(struct wl_private *lp,
     	DBG_TRACE( DbgInfo, "Get tallies failed\n" );
 	ret = -EFAULT;
     }
-
-    DBG_LEAVE( DbgInfo );
 
     return ret;
 }

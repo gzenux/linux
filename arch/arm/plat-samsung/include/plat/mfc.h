@@ -10,6 +10,14 @@
 #ifndef __PLAT_SAMSUNG_MFC_H
 #define __PLAT_SAMSUNG_MFC_H __FILE__
 
+struct s5p_mfc_dt_meminfo {
+	unsigned long	loff;
+	unsigned long	lsize;
+	unsigned long	roff;
+	unsigned long	rsize;
+	char		*compatible;
+};
+
 /**
  * s5p_mfc_reserve_mem - function to early reserve memory for MFC driver
  * @rbase:	base address for MFC 'right' memory interface

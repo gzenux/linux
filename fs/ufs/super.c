@@ -146,10 +146,7 @@ static struct dentry *ufs_fh_to_parent(struct super_block *sb, struct fid *fid,
 
 static struct dentry *ufs_get_parent(struct dentry *child)
 {
-	struct qstr dot_dot = {
-		.name	= "..",
-		.len	= 2,
-	};
+	struct qstr dot_dot = QSTR_INIT("..", 2);
 	ino_t ino;
 
 	ino = ufs_inode_by_name(child->d_inode, &dot_dot);
@@ -305,7 +302,7 @@ void ufs_error (struct super_block * sb, const char * function,
 	if (!(sb->s_flags & MS_RDONLY)) {
 		usb1->fs_clean = UFS_FSBAD;
 		ubh_mark_buffer_dirty(USPI_UBH(uspi));
-		sb->s_dirt = 1;
+		ufs_mark_sb_dirty(sb);
 		sb->s_flags |= MS_RDONLY;
 	}
 	va_start (args, fmt);
@@ -337,7 +334,7 @@ void ufs_panic (struct super_block * sb, const char * function,
 	if (!(sb->s_flags & MS_RDONLY)) {
 		usb1->fs_clean = UFS_FSBAD;
 		ubh_mark_buffer_dirty(USPI_UBH(uspi));
-		sb->s_dirt = 1;
+		ufs_mark_sb_dirty(sb);
 	}
 	va_start (args, fmt);
 	vsnprintf (error_buf, sizeof(error_buf), fmt, args);
@@ -527,11 +524,9 @@ static int ufs_read_cylinder_structures(struct super_block *sb)
 	struct ufs_buffer_head * ubh;
 	unsigned char * base, * space;
 	unsigned size, blks, i;
-	struct ufs_super_block_third *usb3;
 
 	UFSD("ENTER\n");
 
-	usb3 = ubh_get_usb_third(uspi);
 	/*
 	 * Read cs structures from (usually) first data block
 	 * on the device. 
@@ -694,6 +689,82 @@ static void ufs_put_super_internal(struct super_block *sb)
 	UFSD("EXIT\n");
 }
 
+static int ufs_sync_fs(struct super_block *sb, int wait)
+{
+	struct ufs_sb_private_info * uspi;
+	struct ufs_super_block_first * usb1;
+	struct ufs_super_block_third * usb3;
+	unsigned flags;
+
+	lock_ufs(sb);
+
+	UFSD("ENTER\n");
+
+	flags = UFS_SB(sb)->s_flags;
+	uspi = UFS_SB(sb)->s_uspi;
+	usb1 = ubh_get_usb_first(uspi);
+	usb3 = ubh_get_usb_third(uspi);
+
+	usb1->fs_time = cpu_to_fs32(sb, get_seconds());
+	if ((flags & UFS_ST_MASK) == UFS_ST_SUN  ||
+	    (flags & UFS_ST_MASK) == UFS_ST_SUNOS ||
+	    (flags & UFS_ST_MASK) == UFS_ST_SUNx86)
+		ufs_set_fs_state(sb, usb1, usb3,
+				UFS_FSOK - fs32_to_cpu(sb, usb1->fs_time));
+	ufs_put_cstotal(sb);
+
+	UFSD("EXIT\n");
+	unlock_ufs(sb);
+
+	return 0;
+}
+
+static void delayed_sync_fs(struct work_struct *work)
+{
+	struct ufs_sb_info *sbi;
+
+	sbi = container_of(work, struct ufs_sb_info, sync_work.work);
+
+	spin_lock(&sbi->work_lock);
+	sbi->work_queued = 0;
+	spin_unlock(&sbi->work_lock);
+
+	ufs_sync_fs(sbi->sb, 1);
+}
+
+void ufs_mark_sb_dirty(struct super_block *sb)
+{
+	struct ufs_sb_info *sbi = UFS_SB(sb);
+	unsigned long delay;
+
+	spin_lock(&sbi->work_lock);
+	if (!sbi->work_queued) {
+		delay = msecs_to_jiffies(dirty_writeback_interval * 10);
+		queue_delayed_work(system_long_wq, &sbi->sync_work, delay);
+		sbi->work_queued = 1;
+	}
+	spin_unlock(&sbi->work_lock);
+}
+
+static void ufs_put_super(struct super_block *sb)
+{
+	struct ufs_sb_info * sbi = UFS_SB(sb);
+
+	UFSD("ENTER\n");
+
+	if (!(sb->s_flags & MS_RDONLY))
+		ufs_put_super_internal(sb);
+	cancel_delayed_work_sync(&sbi->sync_work);
+
+	ubh_brelse_uspi (sbi->s_uspi);
+	kfree (sbi->s_uspi);
+	mutex_destroy(&sbi->mutex);
+	kfree (sbi);
+	sb->s_fs_info = NULL;
+	UFSD("EXIT\n");
+	return;
+}
+
 static int ufs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct ufs_sb_info * sbi;
@@ -714,22 +785,26 @@ static int ufs_fill_super(struct super_block *sb, void *data, int silent)
 	flags = 0;
 	
 	UFSD("ENTER\n");
+
+#ifndef CONFIG_UFS_FS_WRITE
+	if (!(sb->s_flags & MS_RDONLY)) {
+		printk("ufs was compiled with read-only support, "
+		       "can't be mounted as read-write\n");
+		return -EROFS;
+	}
+#endif
 		
 	sbi = kzalloc(sizeof(struct ufs_sb_info), GFP_KERNEL);
 	if (!sbi)
 		goto failed_nomem;
 	sb->s_fs_info = sbi;
+	sbi->sb = sb;
 
 	UFSD("flag %u\n", (int)(sb->s_flags & MS_RDONLY));
 	
-#ifndef CONFIG_UFS_FS_WRITE
-	if (!(sb->s_flags & MS_RDONLY)) {
-		printk("ufs was compiled with read-only support, "
-		"can't be mounted as read-write\n");
-		goto failed;
-	}
-#endif
 	mutex_init(&sbi->mutex);
+	spin_lock_init(&sbi->work_lock);
+	INIT_DELAYED_WORK(&sbi->sync_work, delayed_sync_fs);
 	/*
 	 * Set default mount options
 	 * Parse mount options
@@ -1181,6 +1256,7 @@ magic_found:
 	return 0;
 
 failed:
+	mutex_destroy(&sbi->mutex);
 	if (ubh)
 		ubh_brelse_uspi (uspi);
 	kfree (uspi);
@@ -1194,68 +1270,6 @@ failed_nomem:
 	return -ENOMEM;
 }
 
-static int ufs_sync_fs(struct super_block *sb, int wait)
-{
-	struct ufs_sb_private_info * uspi;
-	struct ufs_super_block_first * usb1;
-	struct ufs_super_block_third * usb3;
-	unsigned flags;
-
-	lock_ufs(sb);
-	lock_super(sb);
-
-	UFSD("ENTER\n");
-
-	flags = UFS_SB(sb)->s_flags;
-	uspi = UFS_SB(sb)->s_uspi;
-	usb1 = ubh_get_usb_first(uspi);
-	usb3 = ubh_get_usb_third(uspi);
-
-	usb1->fs_time = cpu_to_fs32(sb, get_seconds());
-	if ((flags & UFS_ST_MASK) == UFS_ST_SUN  ||
-	    (flags & UFS_ST_MASK) == UFS_ST_SUNOS ||
-	    (flags & UFS_ST_MASK) == UFS_ST_SUNx86)
-		ufs_set_fs_state(sb, usb1, usb3,
-				UFS_FSOK - fs32_to_cpu(sb, usb1->fs_time));
-	ufs_put_cstotal(sb);
-	sb->s_dirt = 0;
-
-	UFSD("EXIT\n");
-	unlock_super(sb);
-	unlock_ufs(sb);
-
-	return 0;
-}
-
-static void ufs_write_super(struct super_block *sb)
-{
-	if (!(sb->s_flags & MS_RDONLY))
-		ufs_sync_fs(sb, 1);
-	else
-		sb->s_dirt = 0;
-}
-
-static void ufs_put_super(struct super_block *sb)
-{
-	struct ufs_sb_info * sbi = UFS_SB(sb);
-		
-	UFSD("ENTER\n");
-
-	if (sb->s_dirt)
-		ufs_write_super(sb);
-
-	if (!(sb->s_flags & MS_RDONLY))
-		ufs_put_super_internal(sb);
-	
-	ubh_brelse_uspi (sbi->s_uspi);
-	kfree (sbi->s_uspi);
-	kfree (sbi);
-	sb->s_fs_info = NULL;
-	UFSD("EXIT\n");
-	return;
-}
-
-
 static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 {
 	struct ufs_sb_private_info * uspi;
@@ -1264,8 +1278,8 @@ static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 	unsigned new_mount_opt, ufstype;
 	unsigned flags;
 
+	sync_filesystem(sb);
 	lock_ufs(sb);
-	lock_super(sb);
 	uspi = UFS_SB(sb)->s_uspi;
 	flags = UFS_SB(sb)->s_flags;
 	usb1 = ubh_get_usb_first(uspi);
@@ -1279,7 +1293,6 @@ static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 	new_mount_opt = 0;
 	ufs_set_opt (new_mount_opt, ONERROR_LOCK);
 	if (!ufs_parse_options (data, &new_mount_opt)) {
-		unlock_super(sb);
 		unlock_ufs(sb);
 		return -EINVAL;
 	}
@@ -1287,14 +1300,12 @@ static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 		new_mount_opt |= ufstype;
 	} else if ((new_mount_opt & UFS_MOUNT_UFSTYPE) != ufstype) {
 		printk("ufstype can't be changed during remount\n");
-		unlock_super(sb);
 		unlock_ufs(sb);
 		return -EINVAL;
 	}
 
 	if ((*mount_flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY)) {
 		UFS_SB(sb)->s_mount_opt = new_mount_opt;
-		unlock_super(sb);
 		unlock_ufs(sb);
 		return 0;
 	}
@@ -1311,7 +1322,6 @@ static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 			ufs_set_fs_state(sb, usb1, usb3,
 				UFS_FSOK - fs32_to_cpu(sb, usb1->fs_time));
 		ubh_mark_buffer_dirty (USPI_UBH(uspi));
-		sb->s_dirt = 0;
 		sb->s_flags |= MS_RDONLY;
 	} else {
 	/*
@@ -1320,7 +1330,6 @@ static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 #ifndef CONFIG_UFS_FS_WRITE
 		printk("ufs was compiled with read-only support, "
 		"can't be mounted as read-write\n");
-		unlock_super(sb);
 		unlock_ufs(sb);
 		return -EINVAL;
 #else
@@ -1330,13 +1339,11 @@ static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 		    ufstype != UFS_MOUNT_UFSTYPE_SUNx86 &&
 		    ufstype != UFS_MOUNT_UFSTYPE_UFS2) {
 			printk("this ufstype is read-only supported\n");
-			unlock_super(sb);
 			unlock_ufs(sb);
 			return -EINVAL;
 		}
 		if (!ufs_read_cylinder_structures(sb)) {
 			printk("failed during remounting\n");
-			unlock_super(sb);
 			unlock_ufs(sb);
 			return -EPERM;
 		}
@@ -1344,7 +1351,6 @@ static int ufs_remount (struct super_block *sb, int *mount_flags, char *data)
 #endif
 	}
 	UFS_SB(sb)->s_mount_opt = new_mount_opt;
-	unlock_super(sb);
 	unlock_ufs(sb);
 	return 0;
 }
@@ -1374,15 +1380,11 @@ static int ufs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	struct super_block *sb = dentry->d_sb;
 	struct ufs_sb_private_info *uspi= UFS_SB(sb)->s_uspi;
 	unsigned  flags = UFS_SB(sb)->s_flags;
-	struct ufs_super_block_first *usb1;
-	struct ufs_super_block_second *usb2;
 	struct ufs_super_block_third *usb3;
 	u64 id = huge_encode_dev(sb->s_bdev->bd_dev);
 
 	lock_ufs(sb);
 
-	usb1 = ubh_get_usb_first(uspi);
-	usb2 = ubh_get_usb_second(uspi);
 	usb3 = ubh_get_usb_third(uspi);
 	
 	if ((flags & UFS_TYPE_MASK) == UFS_TYPE_UFS2) {
@@ -1438,7 +1440,7 @@ static void init_once(void *foo)
 	inode_init_once(&ei->vfs_inode);
 }
 
-static int init_inodecache(void)
+static int __init init_inodecache(void)
 {
 	ufs_inode_cachep = kmem_cache_create("ufs_inode_cache",
 					     sizeof(struct ufs_inode_info),
@@ -1452,6 +1454,11 @@ static int init_inodecache(void)
 
 static void destroy_inodecache(void)
 {
+	/*
+	 * Make sure all delayed rcu free inodes are flushed before we
+	 * destroy cache.
+	 */
+	rcu_barrier();
 	kmem_cache_destroy(ufs_inode_cachep);
 }
 
@@ -1461,7 +1468,6 @@ static const struct super_operations ufs_super_ops = {
 	.write_inode	= ufs_write_inode,
 	.evict_inode	= ufs_evict_inode,
 	.put_super	= ufs_put_super,
-	.write_super	= ufs_write_super,
 	.sync_fs	= ufs_sync_fs,
 	.statfs		= ufs_statfs,
 	.remount_fs	= ufs_remount,
@@ -1481,6 +1487,7 @@ static struct file_system_type ufs_fs_type = {
 	.kill_sb	= kill_block_super,
 	.fs_flags	= FS_REQUIRES_DEV,
 };
+MODULE_ALIAS_FS("ufs");
 
 static int __init init_ufs_fs(void)
 {

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2000,2002,2005 Silicon Graphics, Inc.
+ * Copyright (c) 2013 Red Hat, Inc.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -18,61 +19,28 @@
 #ifndef __XFS_DA_BTREE_H__
 #define	__XFS_DA_BTREE_H__
 
-struct xfs_buf;
 struct xfs_bmap_free;
 struct xfs_inode;
-struct xfs_mount;
 struct xfs_trans;
 struct zone;
-
-/*========================================================================
- * Directory Structure when greater than XFS_LBSIZE(mp) bytes.
- *========================================================================*/
+struct xfs_dir_ops;
 
 /*
- * This structure is common to both leaf nodes and non-leaf nodes in the Btree.
- *
- * Is is used to manage a doubly linked list of all blocks at the same
- * level in the Btree, and to identify which type of block this is.
+ * Directory/attribute geometry information. There will be one of these for each
+ * data fork type, and it will be passed around via the xfs_da_args. Global
+ * structures will be attached to the xfs_mount.
  */
-#define XFS_DA_NODE_MAGIC	0xfebe	/* magic number: non-leaf blocks */
-#define XFS_ATTR_LEAF_MAGIC	0xfbee	/* magic number: attribute leaf blks */
-#define	XFS_DIR2_LEAF1_MAGIC	0xd2f1	/* magic number: v2 dirlf single blks */
-#define	XFS_DIR2_LEAFN_MAGIC	0xd2ff	/* magic number: v2 dirlf multi blks */
-
-typedef struct xfs_da_blkinfo {
-	__be32		forw;			/* previous block in list */
-	__be32		back;			/* following block in list */
-	__be16		magic;			/* validity check on block */
-	__be16		pad;			/* unused */
-} xfs_da_blkinfo_t;
-
-/*
- * This is the structure of the root and intermediate nodes in the Btree.
- * The leaf nodes are defined above.
- *
- * Entries are not packed.
- *
- * Since we have duplicate keys, use a binary search but always follow
- * all match in the block, not just the first match found.
- */
-#define	XFS_DA_NODE_MAXDEPTH	5	/* max depth of Btree */
-
-typedef struct xfs_da_intnode {
-	struct xfs_da_node_hdr {	/* constant-structure header block */
-		xfs_da_blkinfo_t info;	/* block type, links, etc. */
-		__be16	count;		/* count of active entries */
-		__be16	level;		/* level above leaves (leaf == 0) */
-	} hdr;
-	struct xfs_da_node_entry {
-		__be32	hashval;	/* hash value for this descendant */
-		__be32	before;		/* Btree block before this key */
-	} btree[1];			/* variable sized array of keys */
-} xfs_da_intnode_t;
-typedef struct xfs_da_node_hdr xfs_da_node_hdr_t;
-typedef struct xfs_da_node_entry xfs_da_node_entry_t;
-
-#define	XFS_LBSIZE(mp)	(mp)->m_sb.sb_blocksize
+struct xfs_da_geometry {
+	int		blksize;	/* da block size in bytes */
+	int		fsbcount;	/* da block size in filesystem blocks */
+	uint8_t		fsblog;		/* log2 of _filesystem_ block size */
+	uint8_t		blklog;		/* log2 of da block size */
+	uint		node_ents;	/* # of entries in a danode */
+	int		magicpct;	/* 37% of block size in bytes */
+	xfs_dablk_t	datablk;	/* blockno of dir data v2 */
+	xfs_dablk_t	leafblk;	/* blockno of leaf data v2 */
+	xfs_dablk_t	freeblk;	/* blockno of free data v2 */
+};
 
 /*========================================================================
  * Btree searching and modification structure definitions.
@@ -91,8 +59,10 @@ enum xfs_dacmp {
  * Structure to ease passing around component names.
  */
 typedef struct xfs_da_args {
+	struct xfs_da_geometry *geo;	/* da block geometry */
 	const __uint8_t	*name;		/* string (maybe not NULL terminated) */
 	int		namelen;	/* length of string (maybe no NULL) */
+	__uint8_t	filetype;	/* filetype of inode for directories */
 	__uint8_t	*value;		/* set of bytes (maybe contain NULLs) */
 	int		valuelen;	/* length of value */
 	int		flags;		/* argument flags (eg: ATTR_NOCREATE) */
@@ -108,10 +78,12 @@ typedef struct xfs_da_args {
 	int		index;		/* index of attr of interest in blk */
 	xfs_dablk_t	rmtblkno;	/* remote attr value starting blkno */
 	int		rmtblkcnt;	/* remote attr value block count */
+	int		rmtvaluelen;	/* remote attr value length in bytes */
 	xfs_dablk_t	blkno2;		/* blkno of 2nd attr leaf of interest */
 	int		index2;		/* index of 2nd attr in blk */
 	xfs_dablk_t	rmtblkno2;	/* remote attr value starting blkno */
 	int		rmtblkcnt2;	/* remote attr value block count */
+	int		rmtvaluelen2;	/* remote attr value length in bytes */
 	int		op_flags;	/* operation flags */
 	enum xfs_dacmp	cmpresult;	/* name compare result for lookups */
 } xfs_da_args_t;
@@ -133,24 +105,6 @@ typedef struct xfs_da_args {
 	{ XFS_DA_OP_CILOOKUP,	"CILOOKUP" }
 
 /*
- * Structure to describe buffer(s) for a block.
- * This is needed in the directory version 2 format case, when
- * multiple non-contiguous fsblocks might be needed to cover one
- * logical directory block.
- * If the buffer count is 1 then the data pointer points to the
- * same place as the b_addr field for the buffer, else to kmem_alloced memory.
- */
-typedef struct xfs_dabuf {
-	int		nbuf;		/* number of buffer pointers present */
-	short		dirty;		/* data needs to be copied back */
-	short		bbcount;	/* how large is data in bbs */
-	void		*data;		/* pointer for buffers' data */
-	struct xfs_buf	*bps[1];	/* actually nbuf of these */
-} xfs_dabuf_t;
-#define	XFS_DA_BUF_SIZE(n)	\
-	(sizeof(xfs_dabuf_t) + sizeof(struct xfs_buf *) * ((n) - 1))
-
-/*
  * Storage for holding state during Btree searches and split/join ops.
  *
  * Only need space for 5 intermediate nodes.  With a minimum of 62-way
@@ -158,7 +112,7 @@ typedef struct xfs_dabuf {
  * which is slightly more than enough.
  */
 typedef struct xfs_da_state_blk {
-	xfs_dabuf_t	*bp;		/* buffer containing block */
+	struct xfs_buf	*bp;		/* buffer containing block */
 	xfs_dablk_t	blkno;		/* filesystem blkno of buffer */
 	xfs_daddr_t	disk_blkno;	/* on-disk blkno (in BBs) of buffer */
 	int		index;		/* relevant index into block */
@@ -174,8 +128,6 @@ typedef struct xfs_da_state_path {
 typedef struct xfs_da_state {
 	xfs_da_args_t		*args;		/* filename arguments */
 	struct xfs_mount	*mp;		/* filesystem mount point */
-	unsigned int		blocksize;	/* logical block size */
-	unsigned int		node_ents;	/* how many entries in danode */
 	xfs_da_state_path_t	path;		/* search/split paths */
 	xfs_da_state_path_t	altpath;	/* alternate path for join */
 	unsigned char		inleaf;		/* insert into 1->lf, 0->splf */
@@ -210,28 +162,31 @@ struct xfs_nameops {
 /*
  * Routines used for growing the Btree.
  */
-int	xfs_da_node_create(xfs_da_args_t *args, xfs_dablk_t blkno, int level,
-					 xfs_dabuf_t **bpp, int whichfork);
-int	xfs_da_split(xfs_da_state_t *state);
+int	xfs_da3_node_create(struct xfs_da_args *args, xfs_dablk_t blkno,
+			    int level, struct xfs_buf **bpp, int whichfork);
+int	xfs_da3_split(xfs_da_state_t *state);
 
 /*
  * Routines used for shrinking the Btree.
  */
-int	xfs_da_join(xfs_da_state_t *state);
-void	xfs_da_fixhashpath(xfs_da_state_t *state,
-					  xfs_da_state_path_t *path_to_to_fix);
+int	xfs_da3_join(xfs_da_state_t *state);
+void	xfs_da3_fixhashpath(struct xfs_da_state *state,
+			    struct xfs_da_state_path *path_to_to_fix);
 
 /*
  * Routines used for finding things in the Btree.
  */
-int	xfs_da_node_lookup_int(xfs_da_state_t *state, int *result);
-int	xfs_da_path_shift(xfs_da_state_t *state, xfs_da_state_path_t *path,
+int	xfs_da3_node_lookup_int(xfs_da_state_t *state, int *result);
+int	xfs_da3_path_shift(xfs_da_state_t *state, xfs_da_state_path_t *path,
 					 int forward, int release, int *result);
 /*
  * Utility routines.
  */
-int	xfs_da_blk_link(xfs_da_state_t *state, xfs_da_state_blk_t *old_blk,
+int	xfs_da3_blk_link(xfs_da_state_t *state, xfs_da_state_blk_t *old_blk,
 				       xfs_da_state_blk_t *new_blk);
+int	xfs_da3_node_read(struct xfs_trans *tp, struct xfs_inode *dp,
+			 xfs_dablk_t bno, xfs_daddr_t mappedbno,
+			 struct xfs_buf **bpp, int which_fork);
 
 /*
  * Utility routines.
@@ -241,14 +196,16 @@ int	xfs_da_grow_inode_int(struct xfs_da_args *args, xfs_fileoff_t *bno,
 			      int count);
 int	xfs_da_get_buf(struct xfs_trans *trans, struct xfs_inode *dp,
 			      xfs_dablk_t bno, xfs_daddr_t mappedbno,
-			      xfs_dabuf_t **bp, int whichfork);
+			      struct xfs_buf **bp, int whichfork);
 int	xfs_da_read_buf(struct xfs_trans *trans, struct xfs_inode *dp,
 			       xfs_dablk_t bno, xfs_daddr_t mappedbno,
-			       xfs_dabuf_t **bpp, int whichfork);
-xfs_daddr_t	xfs_da_reada_buf(struct xfs_trans *trans, struct xfs_inode *dp,
-			xfs_dablk_t bno, int whichfork);
+			       struct xfs_buf **bpp, int whichfork,
+			       const struct xfs_buf_ops *ops);
+xfs_daddr_t	xfs_da_reada_buf(struct xfs_inode *dp, xfs_dablk_t bno,
+				xfs_daddr_t mapped_bno, int whichfork,
+				const struct xfs_buf_ops *ops);
 int	xfs_da_shrink_inode(xfs_da_args_t *args, xfs_dablk_t dead_blkno,
-					  xfs_dabuf_t *dead_buf);
+					  struct xfs_buf *dead_buf);
 
 uint xfs_da_hashname(const __uint8_t *name_string, int name_length);
 enum xfs_dacmp xfs_da_compname(struct xfs_da_args *args,
@@ -258,15 +215,7 @@ enum xfs_dacmp xfs_da_compname(struct xfs_da_args *args,
 xfs_da_state_t *xfs_da_state_alloc(void);
 void xfs_da_state_free(xfs_da_state_t *state);
 
-void xfs_da_buf_done(xfs_dabuf_t *dabuf);
-void xfs_da_log_buf(struct xfs_trans *tp, xfs_dabuf_t *dabuf, uint first,
-			   uint last);
-void xfs_da_brelse(struct xfs_trans *tp, xfs_dabuf_t *dabuf);
-void xfs_da_binval(struct xfs_trans *tp, xfs_dabuf_t *dabuf);
-xfs_daddr_t xfs_da_blkno(xfs_dabuf_t *dabuf);
-
 extern struct kmem_zone *xfs_da_state_zone;
-extern struct kmem_zone *xfs_dabuf_zone;
 extern const struct xfs_nameops xfs_default_nameops;
 
 #endif	/* __XFS_DA_BTREE_H__ */

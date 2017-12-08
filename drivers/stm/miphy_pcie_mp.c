@@ -211,7 +211,7 @@ void *pcie_mp_of_get_pdata(struct platform_device *pdev)
 	return data;
 }
 
-static int __devinit pcie_mp_probe(struct platform_device *pdev)
+static int pcie_mp_probe(struct platform_device *pdev)
 {
 	struct pcie_mp_device *mp_dev;
 	struct stm_miphy_device *miphy_dev;

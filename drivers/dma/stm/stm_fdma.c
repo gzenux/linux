@@ -546,7 +546,7 @@ error_desc_get:
 static struct dma_async_tx_descriptor *stm_fdma_prep_dma_cyclic(
 		struct dma_chan *chan, dma_addr_t buf_addr, size_t buf_len,
 		size_t period_len, enum dma_transfer_direction direction,
-		void *context)
+		unsigned long flags, void *context)
 {
 	struct stm_fdma_chan *fchan = to_stm_fdma_chan(chan);
 	struct stm_fdma_desc *head = NULL;
@@ -760,7 +760,7 @@ static int stm_fdma_terminate_all(struct stm_fdma_chan *fchan)
 	list_for_each_entry_safe(fdesc, _fdesc, &list, node) {
 		/* Unmap buffers for non-slave channels (e.g. memcpy) */
 		if (!fchan->dma_chan.private)
-			stm_fdma_desc_unmap_buffers(fdesc);
+			dma_descriptor_unmap(&fdesc->dma_desc);
 
 		/* Move from temporary list to free list (no callbacks!) */
 		stm_fdma_desc_put(fdesc);
@@ -1008,7 +1008,7 @@ static enum dma_status stm_fdma_tx_status(struct dma_chan *chan,
 
 	/* Get the transfer residue based on transfer status */
 	switch (status) {
-	case DMA_SUCCESS:
+	case DMA_COMPLETE:
 		residue = 0;
 		break;
 
@@ -1115,7 +1115,7 @@ void stm_fdma_parse_dt(struct platform_device *pdev,
  * Platform driver initialise.
  */
 
-static int __devinit stm_fdma_probe(struct platform_device *pdev)
+static int stm_fdma_probe(struct platform_device *pdev)
 {
 	struct stm_plat_fdma_data *pdata = pdev->dev.platform_data;
 	struct stm_fdma_device *fdev;

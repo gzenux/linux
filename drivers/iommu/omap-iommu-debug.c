@@ -18,11 +18,11 @@
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
 #include <linux/debugfs.h>
+#include <linux/omap-iommu.h>
+#include <linux/platform_data/iommu-omap.h>
 
-#include <plat/iommu.h>
-#include <plat/iovmm.h>
-
-#include <plat/iopgtable.h>
+#include "omap-iopgtable.h"
+#include "omap-iommu.h"
 
 #define MAXCOLUMN 100 /* for short messages */
 
@@ -354,8 +354,8 @@ DEBUG_FOPS(mem);
 			return -ENOMEM;					\
 	}
 
-#define DEBUG_ADD_FILE(name) __DEBUG_ADD_FILE(name, 600)
-#define DEBUG_ADD_FILE_RO(name) __DEBUG_ADD_FILE(name, 400)
+#define DEBUG_ADD_FILE(name) __DEBUG_ADD_FILE(name, 0600)
+#define DEBUG_ADD_FILE_RO(name) __DEBUG_ADD_FILE(name, 0400)
 
 static int iommu_debug_register(struct device *dev, void *data)
 {

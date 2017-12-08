@@ -34,7 +34,6 @@
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
-#include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -86,7 +85,8 @@ static int debug = TRANZPORT_DEBUG;
 module_param(debug, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Debug enabled or not");
 
-/* All interrupt in transfers are collected in a ring buffer to
+/*
+ * All interrupt in transfers are collected in a ring buffer to
  * avoid racing conditions and get better performance of the driver.
  */
 
@@ -95,7 +95,8 @@ static int ring_buffer_size = RING_BUFFER_SIZE;
 module_param(ring_buffer_size, int, S_IRUGO);
 MODULE_PARM_DESC(ring_buffer_size, "Read ring buffer size in reports");
 
-/* The write_buffer can one day contain more than one interrupt out transfer.
+/*
+ * The write_buffer can one day contain more than one interrupt out transfer.
  */
 static int write_buffer_size = WRITE_BUFFER_SIZE;
 module_param(write_buffer_size, int, S_IRUGO);
@@ -175,24 +176,24 @@ static void usb_tranzport_abort_transfers(struct usb_tranzport *dev)
 }
 
 #define show_int(value)	\
-	static ssize_t show_##value(struct device *dev,	\
+	static ssize_t value##_show(struct device *dev,	\
 			      struct device_attribute *attr, char *buf)	\
 	{	\
 		struct usb_interface *intf = to_usb_interface(dev);	\
 		struct usb_tranzport *t = usb_get_intfdata(intf);	\
 		return sprintf(buf, "%d\n", t->value);	\
 	}	\
-	static DEVICE_ATTR(value, S_IRUGO, show_##value, NULL);
+	static DEVICE_ATTR_RO(value)
 
 #define show_set_int(value)	\
-	static ssize_t show_##value(struct device *dev,	\
+	static ssize_t value##_show(struct device *dev,	\
 			      struct device_attribute *attr, char *buf)	\
 	{	\
 		struct usb_interface *intf = to_usb_interface(dev);	\
 		struct usb_tranzport *t = usb_get_intfdata(intf);	\
 		return sprintf(buf, "%d\n", t->value);	\
 	}	\
-	static ssize_t set_##value(struct device *dev,	\
+	static ssize_t value##_store(struct device *dev,	\
 			     struct device_attribute *attr,		\
 			     const char *buf, size_t count)		\
 	{	\
@@ -204,7 +205,7 @@ static void usb_tranzport_abort_transfers(struct usb_tranzport *dev)
 		t->value = temp;	\
 		return count;	\
 	}	\
-	static DEVICE_ATTR(value, S_IWUSR | S_IRUGO, show_##value, set_##value);
+	static DEVICE_ATTR_RW(value)
 
 show_int(enable);
 show_int(offline);
@@ -256,8 +257,7 @@ static void usb_tranzport_interrupt_in_callback(struct urb *urb)
 
 	if (urb->actual_length != 8) {
 		dev_warn(&dev->intf->dev,
-			"Urb length was %d bytes!!"
-			"Do something intelligent\n",
+			"Urb length was %d bytes!! Do something intelligent\n",
 			 urb->actual_length);
 	} else {
 		dbg_info(&dev->intf->dev,
@@ -271,8 +271,8 @@ static void usb_tranzport_interrupt_in_callback(struct urb *urb)
 			 dev->interrupt_in_buffer[6],
 			 dev->interrupt_in_buffer[7]);
 #if SUPPRESS_EXTRA_OFFLINE_EVENTS
-	if (dev->offline == 2 && dev->interrupt_in_buffer[1] == 0xff)
-		goto resubmit;
+		if (dev->offline == 2 && dev->interrupt_in_buffer[1] == 0xff)
+			goto resubmit;
 		if (dev->offline == 1 && dev->interrupt_in_buffer[1] == 0xff) {
 			dev->offline = 2;
 			goto resubmit;
@@ -285,8 +285,8 @@ static void usb_tranzport_interrupt_in_callback(struct urb *urb)
 			dev->offline = 1;
 
 #endif	/* SUPPRESS_EXTRA_OFFLINE_EVENTS */
-	   dbg_info(&dev->intf->dev, "%s: head, tail are %x, %x\n",
-		__func__, dev->ring_head, dev->ring_tail);
+		dbg_info(&dev->intf->dev, "%s: head, tail are %x, %x\n",
+			 __func__, dev->ring_head, dev->ring_tail);
 
 		next_ring_head = (dev->ring_head + 1) % ring_buffer_size;
 
@@ -353,8 +353,8 @@ static int usb_tranzport_open(struct inode *inode, struct file *file)
 	interface = usb_find_interface(&usb_tranzport_driver, subminor);
 
 	if (!interface) {
-		err("%s - error, can't find device for minor %d\n",
-			__func__, subminor);
+		pr_err("%s - error, can't find device for minor %d\n",
+		       __func__, subminor);
 		retval = -ENODEV;
 		goto unlock_disconnect_exit;
 	}
@@ -475,6 +475,7 @@ static unsigned int usb_tranzport_poll(struct file *file, poll_table *wait)
 {
 	struct usb_tranzport *dev;
 	unsigned int mask = 0;
+
 	dev = file->private_data;
 	poll_wait(file, &dev->read_wait, wait);
 	poll_wait(file, &dev->write_wait, wait);
@@ -517,9 +518,11 @@ static ssize_t usb_tranzport_read(struct file *file, char __user *buffer,
 		goto exit;
 	}
 
-	/* verify that the device wasn't unplugged */ if (dev->intf == NULL) {
+	/* verify that the device wasn't unplugged */
+	if (dev->intf == NULL) {
 		retval = -ENODEV;
-		err("No device or device unplugged %d\n", retval);
+		pr_err("%s: No device or device unplugged %d\n",
+		       __func__, retval);
 		goto unlock_exit;
 	}
 
@@ -539,8 +542,7 @@ static ssize_t usb_tranzport_read(struct file *file, char __user *buffer,
 	}
 
 	dbg_info(&dev->intf->dev,
-		"%s: copying to userspace: "
-		"%02x%02x%02x%02x%02x%02x%02x%02x\n",
+		"%s: copying to userspace: %02x%02x%02x%02x%02x%02x%02x%02x\n",
 		 __func__,
 		 (*dev->ring_buffer)[dev->ring_tail].cmd[0],
 		 (*dev->ring_buffer)[dev->ring_tail].cmd[1],
@@ -563,12 +565,11 @@ static ssize_t usb_tranzport_read(struct file *file, char __user *buffer,
 			newwheel = (*dev->ring_buffer)[next_tail].cmd[6];
 			oldwheel = (*dev->ring_buffer)[dev->ring_tail].cmd[6];
 			/* if both are wheel events, and
-			   no buttons have changes (FIXME, do I have to check?),
-			   and we are the same sign, we can compress +- 7F
-			*/
+			 * no buttons have changes (FIXME, do I have to check?),
+			 * and we are the same sign, we can compress +- 7F
+			 */
 			dbg_info(&dev->intf->dev,
-				"%s: trying to compress: "
-				"%02x%02x%02x%02x%02x%02x%02x%02x\n",
+				"%s: trying to compress: %02x%02x%02x%02x%02x%02x%02x%02x\n",
 				__func__,
 				(*dev->ring_buffer)[dev->ring_tail].cmd[0],
 				(*dev->ring_buffer)[dev->ring_tail].cmd[1],
@@ -691,7 +692,8 @@ static ssize_t usb_tranzport_write(struct file *file,
 	/* verify that the device wasn't unplugged */
 	if (dev->intf == NULL) {
 		retval = -ENODEV;
-		err("No device or device unplugged %d\n", retval);
+		pr_err("%s: No device or device unplugged %d\n",
+		       __func__, retval);
 		goto unlock_exit;
 	}
 
@@ -726,7 +728,7 @@ static ssize_t usb_tranzport_write(struct file *file,
 	}
 
 	if (dev->interrupt_out_endpoint == NULL) {
-		err("Endpoint should not be be null!\n");
+		dev_err(&dev->intf->dev, "Endpoint should not be null!\n");
 		goto unlock_exit;
 	}
 
@@ -746,7 +748,8 @@ static ssize_t usb_tranzport_write(struct file *file,
 	retval = usb_submit_urb(dev->interrupt_out_urb, GFP_KERNEL);
 	if (retval) {
 		dev->interrupt_out_busy = 0;
-		err("Couldn't submit interrupt_out_urb %d\n", retval);
+		dev_err(&dev->intf->dev,
+			"Couldn't submit interrupt_out_urb %d\n", retval);
 		goto unlock_exit;
 	}
 	retval = bytes_to_write;
@@ -799,10 +802,9 @@ static int usb_tranzport_probe(struct usb_interface *intf,
 	/* allocate memory for our device state and initialize it */
 
 	 dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (dev == NULL) {
-		dev_err(&intf->dev, "Out of memory\n");
+	if (dev == NULL)
 		goto exit;
-	}
+
 	mutex_init(&dev->mtx);
 	dev->intf = intf;
 	init_waitqueue_head(&dev->read_wait);
@@ -826,8 +828,7 @@ static int usb_tranzport_probe(struct usb_interface *intf,
 	}
 	if (dev->interrupt_out_endpoint == NULL)
 		dev_warn(&intf->dev,
-			"Interrupt out endpoint not found"
-			"(using control endpoint instead)\n");
+			"Interrupt out endpoint not found (using control endpoint instead)\n");
 
 	dev->interrupt_in_endpoint_size =
 	    le16_to_cpu(dev->interrupt_in_endpoint->wMaxPacketSize);
@@ -839,23 +840,21 @@ static int usb_tranzport_probe(struct usb_interface *intf,
 		ring_buffer_size = RING_BUFFER_SIZE;
 	true_size = min(ring_buffer_size, RING_BUFFER_SIZE);
 
-	/* FIXME - there are more usb_alloc routines for dma correctness.
-	   Needed? */
+	/*
+	 * FIXME - there are more usb_alloc routines for dma correctness.
+	 * Needed?
+	 */
 
 	dev->ring_buffer =
 	    kmalloc((true_size * sizeof(struct tranzport_cmd)) + 8, GFP_KERNEL);
-
-	if (!dev->ring_buffer) {
-		dev_err(&intf->dev,
-			"Couldn't allocate ring_buffer size %d\n", true_size);
+	if (!dev->ring_buffer)
 		goto error;
-	}
+
 	dev->interrupt_in_buffer =
 	    kmalloc(dev->interrupt_in_endpoint_size, GFP_KERNEL);
-	if (!dev->interrupt_in_buffer) {
-		dev_err(&intf->dev, "Couldn't allocate interrupt_in_buffer\n");
+	if (!dev->interrupt_in_buffer)
 		goto error;
-	}
+
 	dev->interrupt_in_urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!dev->interrupt_in_urb) {
 		dev_err(&intf->dev, "Couldn't allocate interrupt_in_urb\n");
@@ -871,12 +870,11 @@ static int usb_tranzport_probe(struct usb_interface *intf,
 			 "Interrupt out endpoint size is not 8!)\n");
 
 	dev->interrupt_out_buffer =
-	    kmalloc(write_buffer_size * dev->interrupt_out_endpoint_size,
-		    GFP_KERNEL);
-	if (!dev->interrupt_out_buffer) {
-		dev_err(&intf->dev, "Couldn't allocate interrupt_out_buffer\n");
+		kmalloc_array(write_buffer_size,
+			      dev->interrupt_out_endpoint_size, GFP_KERNEL);
+	if (!dev->interrupt_out_buffer)
 		goto error;
-	}
+
 	dev->interrupt_out_urb = usb_alloc_urb(0, GFP_KERNEL);
 	if (!dev->interrupt_out_urb) {
 		dev_err(&intf->dev, "Couldn't allocate interrupt_out_urb\n");
@@ -940,6 +938,7 @@ static void usb_tranzport_disconnect(struct usb_interface *intf)
 {
 	struct usb_tranzport *dev;
 	int minor;
+
 	mutex_lock(&disconnect_mutex);
 	dev = usb_get_intfdata(intf);
 	usb_set_intfdata(intf, NULL);

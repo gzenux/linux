@@ -16,6 +16,15 @@ config BITREVERSE
 config RATIONAL
 	boolean
 
+config GENERIC_STRNCPY_FROM_USER
+	bool
+
+config GENERIC_STRNLEN_USER
+	bool
+
+config GENERIC_NET_UTILS
+	bool
+
 config GENERIC_FIND_FIRST_BIT
 	bool
 
@@ -32,6 +41,15 @@ config GENERIC_IOMAP
 config GENERIC_IO
 	boolean
 	default n
+
+config STMP_DEVICE
+	bool
+
+config PERCPU_RWSEM
+	boolean
+
+config ARCH_USE_CMPXCHG_LOCKREF
+	bool
 
 config CRC_CCITT
 	tristate "CRC-CCITT functions"
@@ -51,6 +69,8 @@ config CRC16
 
 config CRC_T10DIF
 	tristate "CRC calculation for the T10 Data Integrity Field"
+	select CRYPTO
+	select CRYPTO_CRCT10DIF
 	help
 	  This option is only needed if a module that's not in the
 	  kernel tree needs to calculate CRC checks for use with the
@@ -162,6 +182,22 @@ config AUDIT_GENERIC
 	depends on AUDIT && !AUDIT_ARCH
 	default y
 
+config AUDIT_ARCH_COMPAT_GENERIC
+	bool
+	default n
+
+config AUDIT_COMPAT_GENERIC
+	bool
+	depends on AUDIT_GENERIC && AUDIT_ARCH_COMPAT_GENERIC && COMPAT
+	default y
+
+config RANDOM32_SELFTEST
+	bool "PRNG perform self test on init"
+	default n
+	help
+	  This option enables the 32 bit PRNG library functions to perform a
+	  self test on initialization.
+
 #
 # compression support is select'ed if needed
 #
@@ -175,6 +211,15 @@ config LZO_COMPRESS
 	tristate
 
 config LZO_DECOMPRESS
+	tristate
+
+config LZ4_COMPRESS
+	tristate
+
+config LZ4HC_COMPRESS
+	tristate
+
+config LZ4_DECOMPRESS
 	tristate
 
 source "lib/xz/Kconfig"
@@ -199,6 +244,10 @@ config DECOMPRESS_XZ
 
 config DECOMPRESS_LZO
 	select LZO_DECOMPRESS
+	tristate
+
+config DECOMPRESS_LZ4
+	select LZ4_DECOMPRESS
 	tristate
 
 config LIBELF_32
@@ -297,15 +346,43 @@ config TEXTSEARCH_FSM
 config BTREE
 	boolean
 
+config INTERVAL_TREE
+	boolean
+	help
+	  Simple, embeddable, interval-tree. Can find the start of an
+	  overlapping range in log(n) time and then iterate over all
+	  overlapping nodes. The algorithm is implemented as an
+	  augmented rbtree.
+
+	  See:
+
+		Documentation/rbtree.txt
+
+	  for more information.
+
+config ASSOCIATIVE_ARRAY
+	bool
+	help
+	  Generic associative array.  Can be searched and iterated over whilst
+	  it is being modified.  It is also reasonably quick to search and
+	  modify.  The algorithms are non-recursive, and the trees are highly
+	  capacious.
+
+	  See:
+
+		Documentation/assoc_array.txt
+
+	  for more information.
+
 config HAS_IOMEM
 	boolean
 	depends on !NO_IOMEM
 	select GENERIC_IO
 	default y
 
-config HAS_IOPORT
+config HAS_IOPORT_MAP
 	boolean
-	depends on HAS_IOMEM && !NO_IOPORT
+	depends on HAS_IOMEM && !NO_IOPORT_MAP
 	default y
 
 config HAS_DMA
@@ -325,7 +402,7 @@ config CPUMASK_OFFSTACK
 
 config DISABLE_OBSOLETE_CPUMASK_FUNCTIONS
        bool "Disable obsolete cpumask functions" if DEBUG_PER_CPU_MAPS
-       depends on EXPERIMENTAL && BROKEN
+       depends on BROKEN
 
 config CPU_RMAP
 	bool
@@ -345,6 +422,9 @@ config NLATTR
 #
 config GENERIC_ATOMIC64
        bool
+
+config ARCH_HAS_ATOMIC64_DEC_IF_POSITIVE
+	def_bool y if GENERIC_ATOMIC64
 
 config LRU_CACHE
 	tristate
@@ -368,6 +448,14 @@ config CORDIC
 	  This option provides an implementation of the CORDIC algorithm;
 	  calculations are in fixed point. Module will be called cordic.
 
+config DDR
+	bool "JEDEC DDR data"
+	help
+	  Data from JEDEC specs for DDR SDRAM memories,
+	  particularly the AC timing parameters and addressing
+	  information. This data is useful for drivers handling
+	  DDR SDRAM controllers.
+
 config MPILIB
 	tristate
 	select CLZ_TAB
@@ -375,14 +463,6 @@ config MPILIB
 	  Multiprecision maths library from GnuPG.
 	  It is used to implement RSA digital signature verification,
 	  which is used by IMA/EVM digital signature extension.
-
-config MPILIB_EXTRA
-	bool
-	depends on MPILIB
-	help
-	  Additional sources of multiprecision maths library from GnuPG.
-	  This code is unnecessary for RSA digital signature verification,
-	  but can be compiled if needed.
 
 config SIGNATURE
 	tristate
@@ -392,5 +472,21 @@ config SIGNATURE
 	help
 	  Digital signature verification. Currently only RSA is supported.
 	  Implementation is done using GnuPG MPI library
+
+#
+# libfdt files, only selected if needed.
+#
+config LIBFDT
+	bool
+
+config OID_REGISTRY
+	tristate
+	help
+	  Enable fast lookup object identifier registry.
+
+config UCS2_STRING
+        tristate
+
+source "lib/fonts/Kconfig"
 
 endmenu

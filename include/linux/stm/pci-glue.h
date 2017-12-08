@@ -27,7 +27,7 @@
 
 enum stm_pci_type {STM_PCI_EMISS, STM_PCI_EXPRESS};
 
-int __devinit stm_pci_register_controller(struct platform_device *pdev,
+int stm_pci_register_controller(struct platform_device *pdev,
 					  struct pci_ops *config_ops,
 					  enum stm_pci_type type);
 

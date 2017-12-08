@@ -43,6 +43,7 @@
 #error "BPA2 must be configured for ALSA support"
 #endif
 
+#define SND_STM_DRIVER	"snd_stm_core"
 
 int snd_stm_debug_level;
 module_param_named(debug, snd_stm_debug_level, int, S_IRUGO | S_IWUSR);
@@ -463,7 +464,7 @@ int snd_stm_buffer_mmap(struct snd_pcm_substream *substream,
 
 	area->vm_ops = &snd_stm_buffer_mmap_vm_ops;
 	area->vm_private_data = substream;
-	area->vm_flags |= VM_RESERVED;
+	area->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
 	area->vm_page_prot = pgprot_noncached(area->vm_page_prot);
 
 	if (remap_pfn_range(area, area->vm_start, phys_addr >> PAGE_SHIFT,
@@ -719,13 +720,11 @@ void snd_stm_iec958_dump(const struct snd_aes_iec958 *vuc)
 			vuc->dig_subframe[2], vuc->dig_subframe[3]);
 }
 
-
-
 /*
- * Core initialization
+ * Driver functions
  */
 
-static int __init snd_stm_core_init(void)
+static int snd_stm_core_probe(struct platform_device *pdev)
 {
 	int result;
 	int i;
@@ -738,7 +737,7 @@ static int __init snd_stm_core_init(void)
 
 	/* Create the sound cards (but don't register them yet!) */
 	for (i = 0; i < SND_STM_CARD_TYPE_COUNT; ++i) {
-		result = snd_card_create(-1, snd_stm_cards[i].name, THIS_MODULE,
+		result = snd_card_new(&pdev->dev, -1, snd_stm_cards[i].name, THIS_MODULE,
 				0, &snd_stm_cards[i].card);
 		if (result) {
 			snd_stm_printe("Failed to create ALSA %s card",
@@ -772,7 +771,7 @@ error_card_create:
 	return result;
 }
 
-static void __exit snd_stm_core_exit(void)
+static int snd_stm_core_remove(struct platform_device *pdev)
 {
 	int i;
 
@@ -785,6 +784,47 @@ static void __exit snd_stm_core_exit(void)
 		if (snd_stm_cards[i].card)
 			snd_card_free(snd_stm_cards[i].card);
 	}
+
+	return 0;
+}
+
+static struct platform_driver snd_stm_core_driver = {
+	.driver		= {
+		.name	= SND_STM_DRIVER,
+	},
+	.probe		= snd_stm_core_probe,
+	.remove		= snd_stm_core_remove,
+};
+
+
+/*
+ * Core initialization
+ */
+
+static struct platform_device snd_stm_core_devices = {
+	.name = SND_STM_DRIVER,
+	.id = -1,
+};
+
+static int __init snd_stm_core_init(void)
+{
+	int result;
+
+	/* Add the platform device */
+	result = platform_device_register(&snd_stm_core_devices);
+	BUG_ON(result);
+
+	/* Register the platform driver */
+	result = platform_driver_register(&snd_stm_core_driver);
+	BUG_ON(result);
+
+	return 0;
+}
+
+static void __exit snd_stm_core_exit(void)
+{
+	platform_device_unregister(&snd_stm_core_devices);
+	platform_driver_unregister(&snd_stm_core_driver);
 }
 
 MODULE_AUTHOR("Pawel Moll <pawel.moll@st.com>");

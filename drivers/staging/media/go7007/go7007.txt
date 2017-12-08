@@ -78,16 +78,13 @@ All vendor-built kernels should already be configured properly.  However,
 for custom-built kernels, the following options need to be enabled in the
 kernel as built-in or modules:
 
-	CONFIG_HOTPLUG           - Support for hot-pluggable devices
 	CONFIG_MODULES           - Enable loadable module support
-	CONFIG_KMOD              - Automatic kernel module loading
 	CONFIG_FW_LOADER         - Hotplug firmware loading support
 	CONFIG_I2C               - I2C support
 	CONFIG_VIDEO_DEV         - Video For Linux
 	CONFIG_SOUND             - Sound card support
 	CONFIG_SND               - Advanced Linux Sound Architecture
 	CONFIG_USB               - Support for Host-side USB
-	CONFIG_USB_DEVICEFS      - USB device filesystem
 	CONFIG_USB_EHCI_HCD      - EHCI HCD (USB 2.0) support
 
 Additionally, to use the example application, the following options need to

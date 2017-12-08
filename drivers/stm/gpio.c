@@ -843,7 +843,7 @@ static int stm_gpio_get_port_num(struct platform_device *pdev)
 
 /*** PIO bank platform device driver ***/
 
-static int __devinit stm_gpio_probe(struct platform_device *pdev)
+static int stm_gpio_probe(struct platform_device *pdev)
 {
 	int port_no;
 	struct stm_gpio_port *port;
@@ -923,7 +923,7 @@ static void *stm_gpio_irqmux_get_pdata(struct platform_device *pdev)
 
 /*** PIO IRQ status register platform device driver ***/
 
-static int __devinit stm_gpio_irqmux_probe(struct platform_device *pdev)
+static int stm_gpio_irqmux_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct stm_plat_pio_irqmux_data *plat_data;

@@ -60,7 +60,7 @@ struct platform_device *stm_pci_bus_to_platform(struct pci_bus *bus)
 	return info->pdev;
 }
 
-int __devinit stm_pci_register_controller(struct platform_device *pdev,
+int stm_pci_register_controller(struct platform_device *pdev,
 					  struct pci_ops *config_ops,
 					  enum stm_pci_type type)
 {

@@ -2,7 +2,7 @@
  * adm1025.c
  *
  * Copyright (C) 2000       Chen-Yuan Wu <gwu@esoft.com>
- * Copyright (C) 2003-2009  Jean Delvare <khali@linux-fr.org>
+ * Copyright (C) 2003-2009  Jean Delvare <jdelvare@suse.de>
  *
  * The ADM1025 is a sensor chip made by Analog Devices. It reports up to 6
  * voltages (including its own power source) and up to two temperatures
@@ -477,11 +477,10 @@ static int adm1025_probe(struct i2c_client *client,
 	int err;
 	u8 config;
 
-	data = kzalloc(sizeof(struct adm1025_data), GFP_KERNEL);
-	if (!data) {
-		err = -ENOMEM;
-		goto exit;
-	}
+	data = devm_kzalloc(&client->dev, sizeof(struct adm1025_data),
+			    GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
 
 	i2c_set_clientdata(client, data);
 	mutex_init(&data->update_lock);
@@ -492,7 +491,7 @@ static int adm1025_probe(struct i2c_client *client,
 	/* Register sysfs hooks */
 	err = sysfs_create_group(&client->dev.kobj, &adm1025_group);
 	if (err)
-		goto exit_free;
+		return err;
 
 	/* Pin 11 is either in4 (+12V) or VID4 */
 	config = i2c_smbus_read_byte_data(client, ADM1025_REG_CONFIG);
@@ -513,9 +512,6 @@ static int adm1025_probe(struct i2c_client *client,
 exit_remove:
 	sysfs_remove_group(&client->dev.kobj, &adm1025_group);
 	sysfs_remove_group(&client->dev.kobj, &adm1025_group_in4);
-exit_free:
-	kfree(data);
-exit:
 	return err;
 }
 
@@ -569,7 +565,6 @@ static int adm1025_remove(struct i2c_client *client)
 	sysfs_remove_group(&client->dev.kobj, &adm1025_group);
 	sysfs_remove_group(&client->dev.kobj, &adm1025_group_in4);
 
-	kfree(data);
 	return 0;
 }
 
@@ -620,6 +615,6 @@ static struct adm1025_data *adm1025_update_device(struct device *dev)
 
 module_i2c_driver(adm1025_driver);
 
-MODULE_AUTHOR("Jean Delvare <khali@linux-fr.org>");
+MODULE_AUTHOR("Jean Delvare <jdelvare@suse.de>");
 MODULE_DESCRIPTION("ADM1025 driver");
 MODULE_LICENSE("GPL");

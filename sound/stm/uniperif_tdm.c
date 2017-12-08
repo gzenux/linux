@@ -1593,7 +1593,7 @@ static struct snd_device_ops uniperif_tdm_snd_device_ops = {
  * Platform driver initialisation.
  */
 
-static int __devinit uniperif_tdm_handset_init(struct uniperif_tdm *tdm, int id)
+static int uniperif_tdm_handset_init(struct uniperif_tdm *tdm, int id)
 {
 	struct snd_card *card = snd_stm_card_get(SND_STM_CARD_TYPE_TELSS);
 	struct telss_handset *handset;
@@ -1800,7 +1800,7 @@ static void uniperif_tdm_parse_dt(struct platform_device *pdev,
 	tdm->info = info;
 }
 
-static int __devinit uniperif_tdm_probe(struct platform_device *pdev)
+static int uniperif_tdm_probe(struct platform_device *pdev)
 {
 	struct snd_card *card = snd_stm_card_get(SND_STM_CARD_TYPE_TELSS);
 	struct uniperif_tdm *tdm;
@@ -2000,7 +2000,7 @@ error_device_new:
 	return result;
 }
 
-static int __devexit uniperif_tdm_remove(struct platform_device *pdev)
+static int uniperif_tdm_remove(struct platform_device *pdev)
 {
 	struct uniperif_tdm *tdm = platform_get_drvdata(pdev);
 

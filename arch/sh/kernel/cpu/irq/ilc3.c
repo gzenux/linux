@@ -350,7 +350,7 @@ static struct irq_chip ilc_chip = {
 	.irq_set_wake	= set_wake_ilc_irq,
 };
 
-static void __devinit ilc_demux_init(struct platform_device *pdev)
+static void ilc_demux_init(struct platform_device *pdev)
 {
 	struct ilc *ilc = platform_get_drvdata(pdev);
 	int irq;
@@ -378,7 +378,7 @@ static void __devinit ilc_demux_init(struct platform_device *pdev)
 	return;
 }
 
-static int __devinit ilc_probe(struct platform_device *pdev)
+static int ilc_probe(struct platform_device *pdev)
 {
 	struct stm_plat_ilc3_data *pdata = pdev->dev.platform_data;
 	struct resource *memory;

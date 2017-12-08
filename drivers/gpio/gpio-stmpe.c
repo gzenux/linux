@@ -11,7 +11,9 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/irq.h>
+#include <linux/irqdomain.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
 #include <linux/mfd/stmpe.h>
 
 /*
@@ -21,15 +23,15 @@
 enum { REG_RE, REG_FE, REG_IE };
 
 #define CACHE_NR_REGS	3
-#define CACHE_NR_BANKS	(STMPE_NR_GPIOS / 8)
+/* No variant has more than 24 GPIOs */
+#define CACHE_NR_BANKS	(24 / 8)
 
 struct stmpe_gpio {
 	struct gpio_chip chip;
 	struct stmpe *stmpe;
 	struct device *dev;
 	struct mutex irq_lock;
-
-	int irq_base;
+	struct irq_domain *domain;
 	unsigned norequest_mask;
 
 	/* Caches of interrupt control registers for bus_lock */
@@ -103,7 +105,7 @@ static int stmpe_gpio_to_irq(struct gpio_chip *chip, unsigned offset)
 {
 	struct stmpe_gpio *stmpe_gpio = to_stmpe_gpio(chip);
 
-	return stmpe_gpio->irq_base + offset;
+	return irq_create_mapping(stmpe_gpio->domain, offset);
 }
 
 static int stmpe_gpio_request(struct gpio_chip *chip, unsigned offset)
@@ -126,13 +128,13 @@ static struct gpio_chip template_chip = {
 	.set			= stmpe_gpio_set,
 	.to_irq			= stmpe_gpio_to_irq,
 	.request		= stmpe_gpio_request,
-	.can_sleep		= 1,
+	.can_sleep		= true,
 };
 
 static int stmpe_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 {
 	struct stmpe_gpio *stmpe_gpio = irq_data_get_irq_chip_data(d);
-	int offset = d->irq - stmpe_gpio->irq_base;
+	int offset = d->hwirq;
 	int regoffset = offset / 8;
 	int mask = 1 << (offset % 8);
 
@@ -199,7 +201,7 @@ static void stmpe_gpio_irq_sync_unlock(struct irq_data *d)
 static void stmpe_gpio_irq_mask(struct irq_data *d)
 {
 	struct stmpe_gpio *stmpe_gpio = irq_data_get_irq_chip_data(d);
-	int offset = d->irq - stmpe_gpio->irq_base;
+	int offset = d->hwirq;
 	int regoffset = offset / 8;
 	int mask = 1 << (offset % 8);
 
@@ -209,7 +211,7 @@ static void stmpe_gpio_irq_mask(struct irq_data *d)
 static void stmpe_gpio_irq_unmask(struct irq_data *d)
 {
 	struct stmpe_gpio *stmpe_gpio = irq_data_get_irq_chip_data(d);
-	int offset = d->irq - stmpe_gpio->irq_base;
+	int offset = d->hwirq;
 	int regoffset = offset / 8;
 	int mask = 1 << (offset % 8);
 
@@ -251,8 +253,10 @@ static irqreturn_t stmpe_gpio_irq(int irq, void *dev)
 		while (stat) {
 			int bit = __ffs(stat);
 			int line = bank * 8 + bit;
+			int child_irq = irq_find_mapping(stmpe_gpio->domain,
+							 line);
 
-			handle_nested_irq(stmpe_gpio->irq_base + line);
+			handle_nested_irq(child_irq);
 			stat &= ~(1 << bit);
 		}
 
@@ -267,43 +271,60 @@ static irqreturn_t stmpe_gpio_irq(int irq, void *dev)
 	return IRQ_HANDLED;
 }
 
-static int __devinit stmpe_gpio_irq_init(struct stmpe_gpio *stmpe_gpio)
+static int stmpe_gpio_irq_map(struct irq_domain *d, unsigned int irq,
+			      irq_hw_number_t hwirq)
 {
-	int base = stmpe_gpio->irq_base;
-	int irq;
+	struct stmpe_gpio *stmpe_gpio = d->host_data;
 
-	for (irq = base; irq < base + stmpe_gpio->chip.ngpio; irq++) {
-		irq_set_chip_data(irq, stmpe_gpio);
-		irq_set_chip_and_handler(irq, &stmpe_gpio_irq_chip,
-					 handle_simple_irq);
-		irq_set_nested_thread(irq, 1);
+	if (!stmpe_gpio)
+		return -EINVAL;
+
+	irq_set_chip_data(irq, stmpe_gpio);
+	irq_set_chip_and_handler(irq, &stmpe_gpio_irq_chip,
+				 handle_simple_irq);
+	irq_set_nested_thread(irq, 1);
 #ifdef CONFIG_ARM
-		set_irq_flags(irq, IRQF_VALID);
+	set_irq_flags(irq, IRQF_VALID);
 #else
-		irq_set_noprobe(irq);
+	irq_set_noprobe(irq);
 #endif
+
+	return 0;
+}
+
+static void stmpe_gpio_irq_unmap(struct irq_domain *d, unsigned int irq)
+{
+#ifdef CONFIG_ARM
+	set_irq_flags(irq, 0);
+#endif
+	irq_set_chip_and_handler(irq, NULL, NULL);
+	irq_set_chip_data(irq, NULL);
+}
+
+static const struct irq_domain_ops stmpe_gpio_irq_simple_ops = {
+	.unmap = stmpe_gpio_irq_unmap,
+	.map = stmpe_gpio_irq_map,
+	.xlate = irq_domain_xlate_twocell,
+};
+
+static int stmpe_gpio_irq_init(struct stmpe_gpio *stmpe_gpio,
+		struct device_node *np)
+{
+	stmpe_gpio->domain = irq_domain_add_simple(np,
+				stmpe_gpio->chip.ngpio, 0,
+				&stmpe_gpio_irq_simple_ops, stmpe_gpio);
+	if (!stmpe_gpio->domain) {
+		dev_err(stmpe_gpio->dev, "failed to create irqdomain\n");
+		return -ENOSYS;
 	}
 
 	return 0;
 }
 
-static void stmpe_gpio_irq_remove(struct stmpe_gpio *stmpe_gpio)
-{
-	int base = stmpe_gpio->irq_base;
-	int irq;
-
-	for (irq = base; irq < base + stmpe_gpio->chip.ngpio; irq++) {
-#ifdef CONFIG_ARM
-		set_irq_flags(irq, 0);
-#endif
-		irq_set_chip_and_handler(irq, NULL, NULL);
-		irq_set_chip_data(irq, NULL);
-	}
-}
-
-static int __devinit stmpe_gpio_probe(struct platform_device *pdev)
+static int stmpe_gpio_probe(struct platform_device *pdev)
 {
 	struct stmpe *stmpe = dev_get_drvdata(pdev->dev.parent);
+	struct device_node *np = pdev->dev.of_node;
 	struct stmpe_gpio_platform_data *pdata;
 	struct stmpe_gpio *stmpe_gpio;
 	int ret;
@@ -321,16 +342,21 @@ static int __devinit stmpe_gpio_probe(struct platform_device *pdev)
 
 	stmpe_gpio->dev = &pdev->dev;
 	stmpe_gpio->stmpe = stmpe;
-	stmpe_gpio->norequest_mask = pdata ? pdata->norequest_mask : 0;
-
 	stmpe_gpio->chip = template_chip;
 	stmpe_gpio->chip.ngpio = stmpe->num_gpios;
 	stmpe_gpio->chip.dev = &pdev->dev;
-	stmpe_gpio->chip.base = pdata ? pdata->gpio_base : -1;
+#ifdef CONFIG_OF
+	stmpe_gpio->chip.of_node = np;
+#endif
+	stmpe_gpio->chip.base = -1;
 
-	if (irq >= 0)
-		stmpe_gpio->irq_base = stmpe->irq_base + STMPE_INT_GPIO(0);
-	else
+	if (pdata)
+		stmpe_gpio->norequest_mask = pdata->norequest_mask;
+	else if (np)
+		of_property_read_u32(np, "st,norequest-mask",
+				&stmpe_gpio->norequest_mask);
+
+	if (irq < 0)
 		dev_info(&pdev->dev,
 			"device configured in no-irq mode; "
 			"irqs are not available\n");
@@ -340,7 +366,7 @@ static int __devinit stmpe_gpio_probe(struct platform_device *pdev)
 		goto out_free;
 
 	if (irq >= 0) {
-		ret = stmpe_gpio_irq_init(stmpe_gpio);
+		ret = stmpe_gpio_irq_init(stmpe_gpio, np);
 		if (ret)
 			goto out_disable;
 
@@ -348,7 +374,7 @@ static int __devinit stmpe_gpio_probe(struct platform_device *pdev)
 				IRQF_ONESHOT, "stmpe-gpio", stmpe_gpio);
 		if (ret) {
 			dev_err(&pdev->dev, "unable to get irq: %d\n", ret);
-			goto out_removeirq;
+			goto out_disable;
 		}
 	}
 
@@ -368,9 +394,6 @@ static int __devinit stmpe_gpio_probe(struct platform_device *pdev)
 out_freeirq:
 	if (irq >= 0)
 		free_irq(irq, stmpe_gpio);
-out_removeirq:
-	if (irq >= 0)
-		stmpe_gpio_irq_remove(stmpe_gpio);
 out_disable:
 	stmpe_disable(stmpe, STMPE_BLOCK_GPIO);
 out_free:
@@ -378,7 +401,7 @@ out_free:
 	return ret;
 }
 
-static int __devexit stmpe_gpio_remove(struct platform_device *pdev)
+static int stmpe_gpio_remove(struct platform_device *pdev)
 {
 	struct stmpe_gpio *stmpe_gpio = platform_get_drvdata(pdev);
 	struct stmpe *stmpe = stmpe_gpio->stmpe;
@@ -398,11 +421,9 @@ static int __devexit stmpe_gpio_remove(struct platform_device *pdev)
 
 	stmpe_disable(stmpe, STMPE_BLOCK_GPIO);
 
-	if (irq >= 0) {
+	if (irq >= 0)
 		free_irq(irq, stmpe_gpio);
-		stmpe_gpio_irq_remove(stmpe_gpio);
-	}
-	platform_set_drvdata(pdev, NULL);
+
 	kfree(stmpe_gpio);
 
 	return 0;
@@ -412,7 +433,7 @@ static struct platform_driver stmpe_gpio_driver = {
 	.driver.name	= "stmpe-gpio",
 	.driver.owner	= THIS_MODULE,
 	.probe		= stmpe_gpio_probe,
-	.remove		= __devexit_p(stmpe_gpio_remove),
+	.remove		= stmpe_gpio_remove,
 };
 
 static int __init stmpe_gpio_init(void)

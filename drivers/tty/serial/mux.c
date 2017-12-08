@@ -29,7 +29,7 @@
 #include <asm/irq.h>
 #include <asm/parisc-device.h>
 
-#ifdef CONFIG_MAGIC_SYSRQ
+#if defined(CONFIG_SERIAL_MUX_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
 #include <linux/sysrq.h>
 #define SUPPORT_SYSRQ
 #endif
@@ -242,8 +242,8 @@ static void mux_write(struct uart_port *port)
  */
 static void mux_read(struct uart_port *port)
 {
+	struct tty_port *tport = &port->state->port;
 	int data;
-	struct tty_struct *tty = port->state->port.tty;
 	__u32 start_count = port->icount.rx;
 
 	while(1) {
@@ -266,12 +266,11 @@ static void mux_read(struct uart_port *port)
 		if (uart_handle_sysrq_char(port, data & 0xffu))
 			continue;
 
-		tty_insert_flip_char(tty, data & 0xFF, TTY_NORMAL);
+		tty_insert_flip_char(tport, data & 0xFF, TTY_NORMAL);
 	}
 	
-	if (start_count != port->icount.rx) {
-		tty_flip_buffer_push(tty);
-	}
+	if (start_count != port->icount.rx)
+		tty_flip_buffer_push(tport);
 }
 
 /**
@@ -520,7 +519,7 @@ static int __init mux_probe(struct parisc_device *dev)
 	return 0;
 }
 
-static int __devexit mux_remove(struct parisc_device *dev)
+static int mux_remove(struct parisc_device *dev)
 {
 	int i, j;
 	int port_count = (long)dev_get_drvdata(&dev->dev);
@@ -571,14 +570,14 @@ static struct parisc_driver builtin_serial_mux_driver = {
 	.name =		"builtin_serial_mux",
 	.id_table =	builtin_mux_tbl,
 	.probe =	mux_probe,
-	.remove =       __devexit_p(mux_remove),
+	.remove =       mux_remove,
 };
 
 static struct parisc_driver serial_mux_driver = {
 	.name =		"serial_mux",
 	.id_table =	mux_tbl,
 	.probe =	mux_probe,
-	.remove =       __devexit_p(mux_remove),
+	.remove =       mux_remove,
 };
 
 /**
@@ -614,7 +613,7 @@ static void __exit mux_exit(void)
 {
 	/* Delete the Mux timer. */
 	if(port_cnt > 0) {
-		del_timer(&mux_timer);
+		del_timer_sync(&mux_timer);
 #ifdef CONFIG_SERIAL_MUX_CONSOLE
 		unregister_console(&mux_console);
 #endif

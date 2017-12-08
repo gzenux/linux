@@ -375,7 +375,7 @@ string_out_func(16, w)
 string_out_func(32, l)
 
 
-static void __iomem __devinit *plat_ioremap_region(struct platform_device *pdev,
+static void __iomem *plat_ioremap_region(struct platform_device *pdev,
 		char *name)
 {
 	struct resource *res;
@@ -471,7 +471,7 @@ void pci_stm_pio_reset(void)
 	mdelay(10);
 }
 
-static void __devinit pci_stm_setup(struct stm_plat_pci_config *pci_config)
+static void pci_stm_setup(struct stm_plat_pci_config *pci_config)
 {
 	unsigned long lmi_base, lmi_end, mbar_size;
 	int fn;
@@ -565,7 +565,7 @@ static void __devinit pci_stm_setup(struct stm_plat_pci_config *pci_config)
  * When we get here, we can assume that the PCI block is powered up and ready
  * to rock, and that all sysconfigs have been set correctly. All mangling
  * of emiss arbiter registers is done here */
-static int __devinit pci_stm_probe(struct platform_device *pdev)
+static int pci_stm_probe(struct platform_device *pdev)
 {
 	int ret, irq;
 	struct stm_plat_pci_config *pci_config = pdev->dev.platform_data;

@@ -248,11 +248,9 @@ static ssize_t set_temp_min(struct device *dev, struct device_attribute *da,
 
 	int result = kstrtol(buf, 10, &val);
 	if (result < 0)
-		return -EINVAL;
+		return result;
 
-	val = DIV_ROUND_CLOSEST(val, 1000);
-	if ((val < -63) || (val > 127))
-		return -EINVAL;
+	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), -63, 127);
 
 	mutex_lock(&data->update_lock);
 	data->temp_min[nr] = val;
@@ -272,11 +270,9 @@ static ssize_t set_temp_max(struct device *dev, struct device_attribute *da,
 
 	int result = kstrtol(buf, 10, &val);
 	if (result < 0)
-		return -EINVAL;
+		return result;
 
-	val = DIV_ROUND_CLOSEST(val, 1000);
-	if ((val < -63) || (val > 127))
-		return -EINVAL;
+	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), -63, 127);
 
 	mutex_lock(&data->update_lock);
 	data->temp_max[nr] = val;
@@ -320,7 +316,7 @@ static ssize_t set_fan_div(struct device *dev, struct device_attribute *da,
 
 	int status = kstrtol(buf, 10, &new_div);
 	if (status < 0)
-		return -EINVAL;
+		return status;
 
 	if (new_div == old_div) /* No change */
 		return count;
@@ -349,7 +345,7 @@ static ssize_t set_fan_div(struct device *dev, struct device_attribute *da,
 		dev_dbg(&client->dev, "reg 0x%02x, err %d\n",
 			REG_FAN_CONF1, status);
 		mutex_unlock(&data->update_lock);
-		return -EIO;
+		return status;
 	}
 	status &= 0x9F;
 	status |= (new_range_bits << 5);
@@ -390,22 +386,21 @@ static ssize_t set_fan_target(struct device *dev, struct device_attribute *da,
 {
 	struct emc2103_data *data = emc2103_update_device(dev);
 	struct i2c_client *client = to_i2c_client(dev);
-	long rpm_target;
+	unsigned long rpm_target;
 
-	int result = kstrtol(buf, 10, &rpm_target);
+	int result = kstrtoul(buf, 10, &rpm_target);
 	if (result < 0)
-		return -EINVAL;
+		return result;
 
 	/* Datasheet states 16384 as maximum RPM target (table 3.2) */
-	if ((rpm_target < 0) || (rpm_target > 16384))
-		return -EINVAL;
+	rpm_target = clamp_val(rpm_target, 0, 16384);
 
 	mutex_lock(&data->update_lock);
 
 	if (rpm_target == 0)
 		data->fan_target = 0x1fff;
 	else
-		data->fan_target = SENSORS_LIMIT(
+		data->fan_target = clamp_val(
 			(FAN_RPM_FACTOR * data->fan_multiplier) / rpm_target,
 			0, 0x1fff);
 
@@ -440,7 +435,7 @@ static ssize_t set_pwm_enable(struct device *dev, struct device_attribute *da,
 
 	int result = kstrtol(buf, 10, &new_value);
 	if (result < 0)
-		return -EINVAL;
+		return result;
 
 	mutex_lock(&data->update_lock);
 	switch (new_value) {
@@ -451,11 +446,15 @@ static ssize_t set_pwm_enable(struct device *dev, struct device_attribute *da,
 		data->fan_rpm_control = true;
 		break;
 	default:
-		mutex_unlock(&data->update_lock);
-		return -EINVAL;
+		count = -EINVAL;
+		goto err;
 	}
 
-	read_u8_from_i2c(client, REG_FAN_CONF1, &conf_reg);
+	result = read_u8_from_i2c(client, REG_FAN_CONF1, &conf_reg);
+	if (result) {
+		count = result;
+		goto err;
+	}
 
 	if (data->fan_rpm_control)
 		conf_reg |= 0x80;
@@ -463,7 +462,7 @@ static ssize_t set_pwm_enable(struct device *dev, struct device_attribute *da,
 		conf_reg &= ~0x80;
 
 	i2c_smbus_write_byte_data(client, REG_FAN_CONF1, conf_reg);
-
+err:
 	mutex_unlock(&data->update_lock);
 	return count;
 }
@@ -586,7 +585,8 @@ emc2103_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -EIO;
 
-	data = kzalloc(sizeof(struct emc2103_data), GFP_KERNEL);
+	data = devm_kzalloc(&client->dev, sizeof(struct emc2103_data),
+			    GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
@@ -604,7 +604,7 @@ emc2103_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		if (status < 0) {
 			dev_dbg(&client->dev, "reg 0x%02x, err %d\n", REG_CONF1,
 				status);
-			goto exit_free;
+			return status;
 		}
 
 		/* detect current state of hardware */
@@ -627,7 +627,7 @@ emc2103_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	/* Register sysfs hooks */
 	status = sysfs_create_group(&client->dev.kobj, &emc2103_group);
 	if (status)
-		goto exit_free;
+		return status;
 
 	if (data->temp_count >= 3) {
 		status = sysfs_create_group(&client->dev.kobj,
@@ -662,8 +662,6 @@ exit_remove_temp3:
 		sysfs_remove_group(&client->dev.kobj, &emc2103_temp3_group);
 exit_remove:
 	sysfs_remove_group(&client->dev.kobj, &emc2103_group);
-exit_free:
-	kfree(data);
 	return status;
 }
 
@@ -681,7 +679,6 @@ static int emc2103_remove(struct i2c_client *client)
 
 	sysfs_remove_group(&client->dev.kobj, &emc2103_group);
 
-	kfree(data);
 	return 0;
 }
 
@@ -728,6 +725,6 @@ static struct i2c_driver emc2103_driver = {
 
 module_i2c_driver(emc2103_driver);
 
-MODULE_AUTHOR("Steve Glendinning <steve.glendinning@smsc.com>");
+MODULE_AUTHOR("Steve Glendinning <steve.glendinning@shawell.net>");
 MODULE_DESCRIPTION("SMSC EMC2103 hwmon driver");
 MODULE_LICENSE("GPL");

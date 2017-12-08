@@ -803,7 +803,7 @@ static void call_apply_boot_mappings(struct pmb_mapping *uc_mapping,
 		: "r0", "r1", "r2", "r3", "r8", "t", "pr");
 }
 
-void __devinit pmb_init(void)
+void pmb_init(void)
 {
 	int i;
 	struct pmb_entry *entry;

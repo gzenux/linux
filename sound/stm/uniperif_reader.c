@@ -529,12 +529,15 @@ static int uniperif_reader_prepare(struct snd_pcm_substream *substream)
 static int uniperif_reader_start(struct snd_pcm_substream *substream)
 {
 	struct uniperif_reader *reader = snd_pcm_substream_chip(substream);
+	enum dma_ctrl_flags flags = DMA_CTRL_ACK;
 
 	dev_dbg(reader->dev, "%s(substream=%p)", __func__, substream);
 
 	BUG_ON(!reader);
 	BUG_ON(!snd_stm_magic_valid(reader));
 
+	if (!substream->runtime->no_period_wakeup)
+		flags |= DMA_PREP_INTERRUPT;
 
 	/* Reset pcm reader */
 	set__AUD_UNIPERIF_SOFT_RST__SOFT_RST(reader);
@@ -543,11 +546,10 @@ static int uniperif_reader_start(struct snd_pcm_substream *substream)
 
 	/* Prepare the dma descriptor */
 	BUG_ON(!reader->dma_channel->device->device_prep_dma_cyclic);
-	reader->dma_descriptor =
-		reader->dma_channel->device->device_prep_dma_cyclic(
+	reader->dma_descriptor = dmaengine_prep_dma_cyclic(
 			reader->dma_channel, substream->runtime->dma_addr,
 			reader->buffer_bytes, reader->period_bytes,
-			DMA_DEV_TO_MEM, NULL);
+			DMA_DEV_TO_MEM, flags);
 	if (!reader->dma_descriptor) {
 		dev_err(reader->dev, "Failed to prepare DMA descriptor");
 		return -ENOMEM;

@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2008 - 2012 Intel Corporation. All rights reserved.
+ * Copyright(c) 2008 - 2014 Intel Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -22,7 +22,7 @@
  * USA
  *
  * The full GNU General Public License is included in this distribution
- * in the file called LICENSE.GPL.
+ * in the file called COPYING.
  *
  * Contact Information:
  *  Intel Linux Wireless <ilw@linux.intel.com>
@@ -30,7 +30,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2005 - 2012 Intel Corporation. All rights reserved.
+ * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,15 +93,7 @@ struct iwl_ucode_header {
  * new TLV uCode file layout
  *
  * The new TLV file format contains TLVs, that each specify
- * some piece of data. To facilitate "groups", for example
- * different instruction image with different capabilities,
- * bundled with the same init image, an alternative mechanism
- * is provided:
- * When the alternative field is 0, that means that the item
- * is always valid. When it is non-zero, then it is only
- * valid in conjunction with items of the same alternative,
- * in which case the driver (user) selects one alternative
- * to use.
+ * some piece of data.
  */
 
 enum iwl_ucode_tlv_type {
@@ -129,11 +121,17 @@ enum iwl_ucode_tlv_type {
 	IWL_UCODE_TLV_SEC_WOWLAN	= 21,
 	IWL_UCODE_TLV_DEF_CALIB		= 22,
 	IWL_UCODE_TLV_PHY_SKU		= 23,
+	IWL_UCODE_TLV_SECURE_SEC_RT	= 24,
+	IWL_UCODE_TLV_SECURE_SEC_INIT	= 25,
+	IWL_UCODE_TLV_SECURE_SEC_WOWLAN	= 26,
+	IWL_UCODE_TLV_NUM_OF_CPU	= 27,
+	IWL_UCODE_TLV_CSCHEME		= 28,
+	IWL_UCODE_TLV_API_CHANGES_SET	= 29,
+	IWL_UCODE_TLV_ENABLED_CAPABILITIES	= 30,
 };
 
 struct iwl_ucode_tlv {
-	__le16 type;		/* see above */
-	__le16 alternative;	/* see comment */
+	__le32 type;		/* see above */
 	__le32 length;		/* not including type/length fields */
 	u8 data[0];
 };
@@ -152,7 +150,7 @@ struct iwl_tlv_ucode_header {
 	u8 human_readable[64];
 	__le32 ver;		/* major/minor/API/serial */
 	__le32 build;
-	__le64 alternatives;	/* bitmask of valid alternatives */
+	__le64 ignore;
 	/*
 	 * The data contained herein has a TLV layout,
 	 * see above for the TLV header and types.
@@ -161,5 +159,20 @@ struct iwl_tlv_ucode_header {
 	 */
 	u8 data[0];
 };
+
+/*
+ * ucode TLVs
+ *
+ * ability to get extension for: flags & capabilities from ucode binaries files
+ */
+struct iwl_ucode_api {
+	__le32 api_index;
+	__le32 api_flags;
+} __packed;
+
+struct iwl_ucode_capa {
+	__le32 api_index;
+	__le32 api_capa;
+} __packed;
 
 #endif  /* __iwl_fw_file_h__ */
