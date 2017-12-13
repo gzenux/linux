@@ -1224,7 +1224,7 @@ static int stm_fdma_probe(struct platform_device *pdev)
 	fdev->dreq_mask = (1 << 0) | (1 << 31);
 
 	/* Create the dma llu pool */
-	fdev->dma_pool = dma_pool_create(dev_name(fdev->dev), NULL,
+	fdev->dma_pool = dma_pool_create(dev_name(fdev->dev), fdev->dev,
 			STM_FDMA_LLU_SIZE, STM_FDMA_LLU_ALIGN, 0);
 	if (fdev->dma_pool == NULL) {
 		dev_err(fdev->dev, "Failed to create dma pool\n");
