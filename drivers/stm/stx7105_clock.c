@@ -16,6 +16,7 @@ int __init stx7105_plat_clk_alias_init(void)
 	/* core clocks */
 	clk_add_alias("cpu_clk", NULL, "CLKA_ST40_ICK", NULL);
 	clk_add_alias("module_clk", NULL, "CLKA_IC_IF_100", NULL);
+	clk_add_alias("tmu_fck", NULL, "CLKA_IC_IF_100", NULL);
 	clk_add_alias("comms_clk", NULL, "CLKA_IC_IF_100", NULL);
 
 	/* EMI clock */
@@ -41,7 +42,9 @@ int __init stx7105_plat_clk_alias_init(void)
 	clk_add_alias("spdif_player_clk", NULL, "CLKC_FS0_CH3", NULL);
 
 	/* SDHCI clocks */
-	clk_add_alias(NULL, "sdhci.0", "CLKB_FS1_CH2",  NULL);
+	clk_add_alias(NULL, "sdhci-stm.0", "CLKB_FS1_CH2",  NULL);
+
+	clk_add_alias("stmmaceth", NULL, "CLKA_ETH0_PHY", NULL);
 
 	return 0;
 }

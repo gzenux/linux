@@ -20,6 +20,7 @@
 #include <linux/stm/emi.h>
 #include <linux/stm/device.h>
 #include <linux/stm/sysconf.h>
+#include <linux/stm/soc.h>
 #include <linux/stm/stx7105.h>
 #include <asm/irq-ilc.h>
 
@@ -742,6 +743,7 @@ void __init stx7105_early_device_init(void)
 	if (cpu_data->type == CPU_STX7106 && chip_revision > 1)
 		chip_revision++;
 	boot_cpu_data.cut_major = chip_revision;
+	stm_soc_set(devid, chip_revision, -1);
 
 	printk(KERN_INFO "STx710%d version %ld.x\n",
 			cpu_data->type == CPU_STX7105 ? 5 : 6, chip_revision);
