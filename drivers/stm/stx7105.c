@@ -376,16 +376,6 @@ static struct platform_device stx7105_rng_hwrandom_device = {
 	}
 };
 
-static struct platform_device stx7105_rng_devrandom_device = {
-	.name = "stm-rng",
-	.id = -1,
-	.num_resources = 1,
-	.resource = (struct resource[]) {
-		STM_PLAT_RESOURCE_MEM(0xfe250000, 0x1000),
-	}
-};
-
-
 
 /* Internal temperature sensor resources ---------------------------------- */
 static void stx7105_temp_power(struct stm_device_state *device_state,
@@ -782,7 +772,6 @@ static struct platform_device *stx7105_devices[] __initdata = {
 	&stx7105_st231_coprocessor_devices[1],
 	&stx7105_sysconf_device,
 	&stx7105_rng_hwrandom_device,
-	&stx7105_rng_devrandom_device,
 	&stx7105_temp_device,
 };
 
