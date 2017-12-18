@@ -57,6 +57,9 @@
 #include <linux/kthread.h>
 #include <linux/mutex.h>
 #include <linux/utsname.h>
+#if 1 /* NextVOD hacking */
+#include <linux/stm/stx7105.h>
+#endif
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -1042,6 +1045,9 @@ static int storage_probe(struct usb_interface *intf,
 	struct us_data *us;
 	int result;
 	int size;
+#if 1 /* NextVOD hacking */
+	static int is_dom_scanned = 0;
+#endif
 
 	/* If uas is enabled and this device can do uas then ignore it. */
 #if IS_ENABLED(CONFIG_USB_UAS)
@@ -1081,6 +1087,20 @@ static int storage_probe(struct usb_interface *intf,
 	/* No special transport or protocol settings in the main module */
 
 	result = usb_stor_probe2(us);
+
+#if 1 /* NextVOD hacking */
+	if (!is_dom_scanned) {
+		dev_dbg(&intf->dev, "%s %s:%d enable stx7105_configure_usb 1\n", __func__, __FILE__, __LINE__);
+		is_dom_scanned = 1;
+		stx7105_configure_usb(1, &(struct stx7105_usb_config) {
+			.ovrcur_mode = stx7105_usb_ovrcur_active_low,
+			.pwr_enabled = 1,
+			.routing.usb1.ovrcur = stx7105_usb1_ovrcur_pio4_6,
+			.routing.usb1.pwr = stx7105_usb1_pwr_pio4_7, });
+		dev_dbg(&intf->dev, "%s %s:%d end stx7105_configure_usb 1\n", __func__, __FILE__, __LINE__);
+	}
+#endif
+
 	return result;
 }
 

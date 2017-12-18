@@ -404,11 +404,14 @@ static int __init device_init(void)
 		.pwr_enabled = 1,
 		.routing.usb0.ovrcur = stx7105_usb0_ovrcur_pio4_4,
 		.routing.usb0.pwr = stx7105_usb0_pwr_pio4_5, });
+
+#if 0 /* enable external after internal USB probe */
 	stx7105_configure_usb(1, &(struct stx7105_usb_config) {
 		.ovrcur_mode = stx7105_usb_ovrcur_active_low,
 		.pwr_enabled = 1,
 		.routing.usb1.ovrcur = stx7105_usb1_ovrcur_pio4_6,
 		.routing.usb1.pwr = stx7105_usb1_pwr_pio4_7, });
+#endif
 
 	gpio_request(PDK7105_PIO_PHY_RESET, "eth_phy_reset");
 	gpio_direction_output(PDK7105_PIO_PHY_RESET, 1);
