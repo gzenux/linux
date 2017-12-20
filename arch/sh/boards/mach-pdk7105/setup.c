@@ -41,17 +41,18 @@
 #define PDK7105_PIO_PHY_RESET stm_gpio(15, 5)
 #define PDK7105_PIO_FLASH_WP stm_gpio(6, 4)
 
-static int ascs[2] __initdata = { 2, 3 };
-
 static void __init pdk7105_setup(char** cmdline_p)
 {
 	printk("STMicroelectronics PDK7105-SDK board initialisation\n");
 
 	stx7105_early_device_init();
+	/* serial console */
 	stx7105_configure_asc(2, &(struct stx7105_asc_config) {
 		.routing.asc2 = stx7105_asc2_pio4,
 		.hw_flow_control = 1,
 		.is_console = 1, });
+	/* normal uart3 with default config */
+	stx7105_configure_asc(3, NULL);
 }
 
 #if defined(CONFIG_LEDS_GPIO) || defined(CONFIG_LEDS_GPIO_MODULE)
@@ -66,7 +67,7 @@ static struct platform_device pdk7105_leds = {
 #if defined(CONFIG_LEDS_TRIGGER_HEARTBEAT)
 				.default_trigger = "heartbeat",
 #endif
-				.gpio = stm_gpio(0, 4),
+				.gpio = stm_gpio(2, 4),
 				.active_low = 0,
 				.retain_state_suspended = 1,
 				.default_state = 0, /* 0:on 1:off 2:keep */
@@ -76,7 +77,7 @@ static struct platform_device pdk7105_leds = {
 #if defined(CONFIG_LEDS_TRIGGER_TIMER)
 				.default_trigger = "timer",
 #endif
-				.gpio = stm_gpio(0, 5),
+				.gpio = stm_gpio(2, 3),
 				.active_low = 0,
 				.retain_state_suspended = 1,
 				.default_state = 1, /* 0:on 1:off 2:keep */
@@ -110,8 +111,6 @@ static struct platform_device pdk7105_key_device = {
 	}
 };
 #endif
-
-static struct stpio_pin *phy_reset_pin;
 
 static int pdk7105_phy_reset(void* bus)
 {
@@ -312,7 +311,6 @@ static struct platform_device *pdk7105_devices[] __initdata = {
 };
 
 /* PCI configuration */
-static int pdk7105_pci_map_irq(const struct pci_dev *dev, u8 slot, u8 pin);
 static struct stm_plat_pci_config pdk7105_pci_config = {
 	.pci_irq = {
 		[0] = PCI_PIN_DEFAULT,
@@ -331,10 +329,9 @@ static struct stm_plat_pci_config pdk7105_pci_config = {
 	},
 	.pci_clk = 33333333,
 	.pci_reset_gpio = stm_gpio(15, 7),
-	.pci_map_irq = pdk7105_pci_map_irq,
 };
 
-static int pdk7105_pci_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
+int pcibios_map_platform_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
 	/* We can use the standard function on this board */
 	return stx7105_pcibios_map_platform_irq(&pdk7105_pci_config, pin);
@@ -438,6 +435,8 @@ static int __init device_init(void)
 		.tx_enabled = 1,
 		.tx_od_enabled = 1, });
 #endif
+
+	/* FIXME: need to check why missing this function? */
 	//stx7105_configure_audio_pins(3, 1, 1);
 
 	/*
