@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  *  linux/arch/arm/kernel/entry-armv.S
  *
@@ -65,6 +66,7 @@
 	.section	.kprobes.text,"ax",%progbits
 #else
 	.text
+	.section .text.fastpath, "a"
 #endif
 
 /*

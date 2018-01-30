@@ -1981,11 +1981,19 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 				tty->ops->flush_chars(tty);
 		} else {
 			while (nr > 0) {
+				mutex_lock(&tty->output_lock);
 				c = tty->ops->write(tty, b, nr);
+				mutex_unlock(&tty->output_lock);
 				if (c < 0) {
 					retval = c;
 					goto break_out;
 				}
+
+				if (c == 0 && !strcmp(tty->driver->name, "ttyACM")){
+					printk(KERN_WARNING "n_tty_write: tty->driver->name=%s break_out 1.\n", tty->driver->name);
+					goto break_out;
+				}
+
 				if (!c)
 					break;
 				b += c;
@@ -1996,6 +2004,10 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 			break;
 		if (file->f_flags & O_NONBLOCK) {
 			retval = -EAGAIN;
+			break;
+		}
+		if (!strcmp(tty->driver->name, "ttyACM")){
+			printk(KERN_WARNING "n_tty_write: tty->driver->name=%s break_out 2.\n", tty->driver->name);
 			break;
 		}
 		schedule();

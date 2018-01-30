@@ -29,6 +29,13 @@
 #include <net/netfilter/ipv4/nf_conntrack_ipv4.h>
 #include <net/netfilter/ipv6/nf_conntrack_ipv6.h>
 
+#ifdef HNDCTF
+#include <ctf/hndctf.h>
+extern int ip_conntrack_ipct_delete(struct nf_conn *ct, int ct_timeout);
+#else
+#define BCMFASTPATH_HOST
+#endif /* HNDCTF */
+
 /* "Be conservative in what you do,
     be liberal in what you accept from others."
     If it's non-zero, we mark only out of window RST segments as INVALID. */
@@ -73,7 +80,7 @@ static unsigned int nf_ct_tcp_timeout_unacknowledged __read_mostly =   5 MINS;
 static unsigned int tcp_timeouts[TCP_CONNTRACK_MAX] __read_mostly = {
 	[TCP_CONNTRACK_SYN_SENT]	= 2 MINS,
 	[TCP_CONNTRACK_SYN_RECV]	= 60 SECS,
-	[TCP_CONNTRACK_ESTABLISHED]	= 5 DAYS,
+	[TCP_CONNTRACK_ESTABLISHED]	= 40 MINS, /* was 5 DAYS, no less then tcp_keepalive_time + tcp_keepalive_probes * tcp_keepalive_intvl */
 	[TCP_CONNTRACK_FIN_WAIT]	= 2 MINS,
 	[TCP_CONNTRACK_CLOSE_WAIT]	= 60 SECS,
 	[TCP_CONNTRACK_LAST_ACK]	= 30 SECS,
@@ -760,7 +767,7 @@ static const u8 tcp_valid_flags[(TCPHDR_FIN|TCPHDR_SYN|TCPHDR_RST|TCPHDR_ACK|
 };
 
 /* Protect conntrack agaist broken packets. Code taken from ipt_unclean.c.  */
-static int tcp_error(struct net *net, struct nf_conn *tmpl,
+static int BCMFASTPATH_HOST tcp_error(struct net *net, struct nf_conn *tmpl,
 		     struct sk_buff *skb,
 		     unsigned int dataoff,
 		     enum ip_conntrack_info *ctinfo,
@@ -815,7 +822,7 @@ static int tcp_error(struct net *net, struct nf_conn *tmpl,
 }
 
 /* Returns verdict for packet, or -1 for invalid. */
-static int tcp_packet(struct nf_conn *ct,
+static int BCMFASTPATH_HOST tcp_packet(struct nf_conn *ct,
 		      const struct sk_buff *skb,
 		      unsigned int dataoff,
 		      enum ip_conntrack_info ctinfo,
@@ -991,6 +998,18 @@ static int tcp_packet(struct nf_conn *ct,
 		/* Keep compilers happy. */
 		break;
 	}
+
+#ifdef HNDCTF
+	/* Remove the ipc entries on receipt of FIN or RST */
+	if (CTF_ENAB(kcih)) {
+		if (ct->ctf_flags & CTF_FLAGS_CACHED) {
+			if (th->fin || th->rst) {
+				ip_conntrack_ipct_delete(ct, 0);
+			}
+			goto in_window;
+		}
+	}
+#endif /* HNDCTF */
 
 	if (!tcp_in_window(ct, &ct->proto.tcp, dir, index,
 			   skb, dataoff, th, pf)) {
