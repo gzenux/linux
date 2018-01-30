@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  * Connection state tracking for netfilter.  This is separated from,
  * but required by, the (future) NAT layer; it can also be used by an iptables
@@ -85,6 +86,16 @@ struct nf_conn_help {
 	u8 expecting[NF_CT_MAX_EXPECT_CLASSES];
 };
 
+#ifdef	HNDCTF
+#define CTF_FLAGS_CACHED	(1 << 31)	/* Indicates cached connection */
+#define CTF_FLAGS_EXCLUDED	(1 << 30)
+#define CTF_FLAGS_DNAT_CACHED	(1 << 29)
+#define CTF_FLAGS_SNAT_CACHED	(1 << 28)
+#define CTF_FLAGS_ROUTE_CACHED	(1 << 27)
+#define CTF_FLAGS_REPLY_CACHED	(1 << 1)
+#define CTF_FLAGS_ORG_CACHED	(1 << 0)
+#endif
+
 #include <net/netfilter/ipv4/nf_conntrack_ipv4.h>
 #include <net/netfilter/ipv6/nf_conntrack_ipv6.h>
 
@@ -115,6 +126,14 @@ struct nf_conn {
 #ifdef CONFIG_NF_CONNTRACK_SECMARK
 	u_int32_t secmark;
 #endif
+
+#ifdef HNDCTF
+	/* Timeout for the connection */
+	u_int32_t expire_jiffies;
+
+	/* Flags for connection attributes */
+	u_int32_t ctf_flags;
+#endif /* HNDCTF */
 
 	/* Storage reserved for other modules: */
 	union nf_conntrack_proto proto;

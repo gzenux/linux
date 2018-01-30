@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  * xHCI host controller driver
  *
@@ -67,6 +68,9 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include "xhci.h"
+
+#include <typedefs.h>
+#include <bcmdefs.h>
 
 /*
  * Returns zero if the TRB isn't in this segment, otherwise it returns the DMA
@@ -141,26 +145,36 @@ static void next_trb(struct xhci_hcd *xhci,
  */
 static void inc_deq(struct xhci_hcd *xhci, struct xhci_ring *ring, bool consumer)
 {
-	union xhci_trb *next = ++(ring->dequeue);
 	unsigned long long addr;
 
 	ring->deq_updates++;
-	/* Update the dequeue pointer further if that was a link TRB or we're at
-	 * the end of an event ring segment (which doesn't have link TRBS)
-	 */
-	while (last_trb(xhci, ring, ring->deq_seg, next)) {
-		if (consumer && last_trb_on_last_seg(xhci, ring, ring->deq_seg, next)) {
-			ring->cycle_state = (ring->cycle_state ? 0 : 1);
-			if (!in_interrupt())
-				xhci_dbg(xhci, "Toggle cycle state for ring %p = %i\n",
-						ring,
-						(unsigned int) ring->cycle_state);
+
+	do {
+		/* Update the dequeue pointer further if that was a link TRB or
+		 * we're at the end of an event ring segment (which doesn't have
+		 * link TRBS)
+		 */
+		if (last_trb(xhci, ring, ring->deq_seg, ring->dequeue)) {
+			if (consumer && last_trb_on_last_seg(xhci, ring,
+				ring->deq_seg, ring->dequeue)) {
+				if (!in_interrupt())
+					xhci_dbg(xhci, "Toggle cycle state "
+									"for ring %p = %i\n",
+									ring,
+									(unsigned int)
+									ring->cycle_state);
+				ring->cycle_state = (ring->cycle_state ? 0 : 1);
+			}
+			ring->deq_seg = ring->deq_seg->next;
+			ring->dequeue = ring->deq_seg->trbs;
 		}
-		ring->deq_seg = ring->deq_seg->next;
-		ring->dequeue = ring->deq_seg->trbs;
-		next = ring->dequeue;
-	}
+		else {
+			ring->dequeue++;
+		}
+	} while (last_trb(xhci, ring, ring->deq_seg, ring->dequeue));
+
 	addr = (unsigned long long) xhci_trb_virt_to_dma(ring->deq_seg, ring->dequeue);
+
 	if (ring == xhci->event_ring)
 		xhci_dbg(xhci, "Event ring deq = 0x%llx (DMA)\n", addr);
 	else if (ring == xhci->cmd_ring)
@@ -339,6 +353,16 @@ static void ring_ep_doorbell(struct xhci_hcd *xhci,
 		xhci_writel(xhci, field, db_addr);
 	}
 }
+
+#ifdef CONFIG_BCM47XX
+void xhci_ring_ep_doorbell(struct xhci_hcd *xhci,
+		unsigned int slot_id,
+		unsigned int ep_index,
+		unsigned int stream_id)
+{
+	ring_ep_doorbell(xhci, slot_id, ep_index, stream_id);
+}
+#endif /* CONFIG_BCM47XX */
 
 /* Ring the doorbell for any rings with pending URBs */
 static void ring_doorbell_for_active_rings(struct xhci_hcd *xhci,
@@ -2010,7 +2034,7 @@ static void xhci_handle_event(struct xhci_hcd *xhci)
  * we might get bad data out of the event ring.  Section 4.10.2.7 has a list of
  * indicators of an event TRB error, but we check the status *first* to be safe.
  */
-irqreturn_t xhci_irq(struct usb_hcd *hcd)
+irqreturn_t BCMFASTPATH_HOST xhci_irq(struct usb_hcd *hcd)
 {
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	u32 status;
@@ -2405,6 +2429,47 @@ static u32 xhci_td_remainder(unsigned int remainder)
 		return (remainder >> 10) << 17;
 }
 
+#ifdef CONFIG_BCM47XX
+/*
+ * For xHCI 1.0 host controllers, TD size is the number of packets remaining in
+ * the TD (*not* including this TRB).
+ *
+ * Total TD packet count = total_packet_count =
+ *     roundup(TD size in bytes / wMaxPacketSize)
+ *
+ * Packets transferred up to and including this TRB = packets_transferred =
+ *     rounddown(total bytes transferred including this TRB / wMaxPacketSize)
+ *
+ * TD size = total_packet_count - packets_transferred
+ *
+ * It must fit in bits 21:17, so it can't be bigger than 31.
+*/
+static u32 xhci_v1_0_td_remainder(int running_total, int trb_buff_len,
+		unsigned int total_packet_count, struct urb *urb)
+{
+	int packets_transferred;
+	u32 max = (1 << (21 - 17 + 1)) - 1;
+	u32 remainder = 0;
+
+	/* One TRB with a zero-length data packet. */
+	if (running_total == 0 && trb_buff_len == 0)
+		return 0;
+
+	/* All the TRB queueing functions don't count the current TRB in
+	 * running_total.
+	 */
+	packets_transferred = (running_total + trb_buff_len) /
+				usb_endpoint_maxp(&urb->ep->desc);
+
+	remainder = total_packet_count - packets_transferred;
+
+	if (remainder >= max)
+		return (max << 17);
+	else
+		return (remainder << 17);  
+}
+#endif /* CONFIG_BCM47XX */
+
 static int queue_bulk_sg_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 		struct urb *urb, int slot_id, unsigned int ep_index)
 {
@@ -2415,6 +2480,9 @@ static int queue_bulk_sg_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	struct scatterlist *sg;
 	int num_sgs;
 	int trb_buff_len, this_sg_len, running_total;
+#ifdef CONFIG_BCM47XX
+	unsigned int total_packet_count;   
+#endif /* CONFIG_BCM47XX */
 	bool first_trb;
 	u64 addr;
 	bool more_trbs_coming;
@@ -2428,6 +2496,11 @@ static int queue_bulk_sg_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 
 	num_trbs = count_sg_trbs_needed(xhci, urb);
 	num_sgs = urb->num_sgs;
+
+#ifdef CONFIG_BCM47XX
+	total_packet_count = DIV_ROUND_UP(urb->transfer_buffer_length, 
+					usb_endpoint_maxp(&urb->ep->desc));
+#endif /* CONFIG_BCM47XX */
 
 	trb_buff_len = prepare_transfer(xhci, xhci->devs[slot_id],
 			ep_index, urb->stream_id,
@@ -2490,6 +2563,12 @@ static int queue_bulk_sg_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 			td->last_trb = ep_ring->enqueue;
 			field |= TRB_IOC;
 		}
+#ifdef CONFIG_BCM47XX
+		/* Only set interrupt on short packet for IN endpoints */
+		if (usb_urb_dir_in(urb))
+#endif /* CONFIG_BCM47XX */
+			field |= TRB_ISP;
+
 		xhci_dbg(xhci, " sg entry: dma = %#x, len = %#x (%d), "
 				"64KB boundary at %#x, end dma = %#x\n",
 				(unsigned int) addr, trb_buff_len, trb_buff_len,
@@ -2502,15 +2581,29 @@ static int queue_bulk_sg_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 					(unsigned int) (addr + TRB_MAX_BUFF_SIZE) & ~(TRB_MAX_BUFF_SIZE - 1),
 					(unsigned int) addr + trb_buff_len);
 		}
-		remainder = xhci_td_remainder(urb->transfer_buffer_length -
-				running_total) ;
+
+#ifdef CONFIG_BCM47XX
+		/* Set the TRB length, TD size, and interrupter fields. */
+		if (xhci->hci_version < 0x100) {
+#endif /* CONFIG_BCM47XX */
+			remainder = xhci_td_remainder(
+					urb->transfer_buffer_length -
+					running_total);
+#ifdef CONFIG_BCM47XX
+		} else {
+			remainder = xhci_v1_0_td_remainder(running_total,
+					trb_buff_len, total_packet_count, urb);
+		}
+#endif /* CONFIG_BCM47XX */
 		length_field = TRB_LEN(trb_buff_len) |
 			remainder |
 			TRB_INTR_TARGET(0);
-		if (num_trbs > 1)
+
+		if (num_trbs > 1) 
 			more_trbs_coming = true;
 		else
 			more_trbs_coming = false;
+
 		queue_trb(xhci, ep_ring, false, more_trbs_coming,
 				lower_32_bits(addr),
 				upper_32_bits(addr),
@@ -2520,7 +2613,7 @@ static int queue_bulk_sg_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 				 * (Unless we use event data TRBs, which are a
 				 * waste of space and HC resources.)
 				 */
-				field | TRB_ISP | TRB_TYPE(TRB_NORMAL));
+				field | TRB_TYPE(TRB_NORMAL));
 		--num_trbs;
 		running_total += trb_buff_len;
 
@@ -2568,6 +2661,9 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	u32 field, length_field;
 
 	int running_total, trb_buff_len, ret;
+#ifdef CONFIG_BCM47XX
+	unsigned int total_packet_count;
+#endif /* CONFIG_BCM47XX */
 	u64 addr;
 
 	if (urb->num_sgs)
@@ -2620,6 +2716,12 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	start_cycle = ep_ring->cycle_state;
 
 	running_total = 0;
+
+#ifdef CONFIG_BCM47XX
+	total_packet_count = DIV_ROUND_UP(urb->transfer_buffer_length,
+						usb_endpoint_maxp(&urb->ep->desc));
+#endif /* CONFIG_BCM47XX */
+
 	/* How much data is in the first TRB? */
 	addr = (u64) urb->transfer_dma;
 	trb_buff_len = TRB_MAX_BUFF_SIZE -
@@ -2650,8 +2752,25 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 			td->last_trb = ep_ring->enqueue;
 			field |= TRB_IOC;
 		}
-		remainder = xhci_td_remainder(urb->transfer_buffer_length -
-				running_total);
+#ifdef CONFIG_BCM47XX
+	      	/* Only set interrupt on short packet for IN endpoints */
+		if (usb_urb_dir_in(urb))
+#endif /* CONFIG_BCM47XX */
+			field |= TRB_ISP;
+
+#ifdef CONFIG_BCM47XX
+	        /* Set the TRB length, TD size, and interrupter fields. */
+		if (xhci->hci_version < 0x100) {
+#endif /* CONFIG_BCM47XX */
+			remainder = xhci_td_remainder(
+					urb->transfer_buffer_length -
+					running_total);
+#ifdef CONFIG_BCM47XX
+		} else {
+			remainder = xhci_v1_0_td_remainder(running_total,
+					trb_buff_len, total_packet_count, urb);
+		}
+#endif /* CONFIG_BCM47XX */
 		length_field = TRB_LEN(trb_buff_len) |
 			remainder |
 			TRB_INTR_TARGET(0);
@@ -2659,6 +2778,7 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 			more_trbs_coming = true;
 		else
 			more_trbs_coming = false;
+
 		queue_trb(xhci, ep_ring, false, more_trbs_coming,
 				lower_32_bits(addr),
 				upper_32_bits(addr),
@@ -2668,7 +2788,7 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 				 * (Unless we use event data TRBs, which are a
 				 * waste of space and HC resources.)
 				 */
-				field | TRB_ISP | TRB_TYPE(TRB_NORMAL));
+				field | TRB_TYPE(TRB_NORMAL));
 		--num_trbs;
 		running_total += trb_buff_len;
 
@@ -2742,13 +2862,28 @@ int xhci_queue_ctrl_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	/* Queue setup TRB - see section 6.4.1.2.1 */
 	/* FIXME better way to translate setup_packet into two u32 fields? */
 	setup = (struct usb_ctrlrequest *) urb->setup_packet;
+	field = 0;
+	field |= TRB_IDT | TRB_TYPE(TRB_SETUP);
+
+	if (start_cycle == 0)
+		field |= 0x1; /* Cycle bit */
+
+	/* xHCI 1.0 6.4.1.2.1: Transfer Type field */
+	if (xhci->hci_version == 0x100) {
+		if (urb->transfer_buffer_length > 0) {
+			if (setup->bRequestType & USB_DIR_IN)
+				field |= TRB_TX_TYPE(TRB_DATA_IN);
+			else
+				field |= TRB_TX_TYPE(TRB_DATA_OUT);
+		}
+	}
+
 	queue_trb(xhci, ep_ring, false, true,
-			/* FIXME endianness is probably going to bite my ass here. */
-			setup->bRequestType | setup->bRequest << 8 | setup->wValue << 16,
-			setup->wIndex | setup->wLength << 16,
+			setup->bRequestType | setup->bRequest << 8 | le16_to_cpu(setup->wValue) << 16,
+			le16_to_cpu(setup->wIndex) | le16_to_cpu(setup->wLength) << 16,
 			TRB_LEN(8) | TRB_INTR_TARGET(0),
 			/* Immediate data in pointer */
-			TRB_IDT | TRB_TYPE(TRB_SETUP));
+			field);
 
 	/* If there's data, queue data TRBs */
 	field = 0;

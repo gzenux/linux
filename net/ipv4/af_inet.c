@@ -117,6 +117,8 @@
 #include <linux/mroute.h>
 #endif
 
+#include <typedefs.h>
+#include <bcmdefs.h>
 
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
@@ -1225,7 +1227,7 @@ out:
 	return err;
 }
 
-static struct sk_buff *inet_gso_segment(struct sk_buff *skb, int features)
+static struct sk_buff * BCMFASTPATH_HOST inet_gso_segment(struct sk_buff *skb, int features)
 {
 	struct sk_buff *segs = ERR_PTR(-EINVAL);
 	struct iphdr *iph;
@@ -1293,7 +1295,7 @@ out:
 	return segs;
 }
 
-static struct sk_buff **inet_gro_receive(struct sk_buff **head,
+static struct sk_buff ** BCMFASTPATH_HOST inet_gro_receive(struct sk_buff **head,
 					 struct sk_buff *skb)
 {
 	const struct net_protocol *ops;
@@ -1371,7 +1373,7 @@ out:
 	return pp;
 }
 
-static int inet_gro_complete(struct sk_buff *skb)
+static int BCMFASTPATH_HOST inet_gro_complete(struct sk_buff *skb)
 {
 	const struct net_protocol *ops;
 	struct iphdr *iph = ip_hdr(skb);

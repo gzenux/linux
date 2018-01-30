@@ -742,7 +742,7 @@ static struct item_operations errcatch_ops = {
 //////////////////////////////////////////////////////////////////////////////
 //
 //
-#if ! (TYPE_STAT_DATA == 0 && TYPE_INDIRECT == 1 && TYPE_DIRECT == 2 && TYPE_DIRENTRY == 3)
+#if ! (TYPE_STAT_DATA == 0 && TYPE_DIRECT == 2 && TYPE_DIRENTRY == 3)
 #error Item types must use disk-format assigned values.
 #endif
 
