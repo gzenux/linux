@@ -244,8 +244,17 @@ static void tdi_reset (struct ehci_hcd *ehci)
 	 * controller reset. Set the required endian mode
 	 * for transfer buffers to match the host microprocessor
 	 */
+#if defined(CONFIG_MIPS)
+#if defined(CONFIG_CPU_BIG_ENDIAN)
+       tmp |= USBMODE_BE;
+#endif
+#if defined(CONFIG_CPU_LITTLE_ENDIAN)
+       tmp &= ~USBMODE_BE;
+#endif
+#else
 	if (ehci_big_endian_mmio(ehci))
 		tmp |= USBMODE_BE;
+#endif
 	ehci_writel(ehci, tmp, reg_ptr);
 }
 
@@ -1208,6 +1217,11 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_ARCH_AT91
 #include "ehci-atmel.c"
 #define	PLATFORM_DRIVER		ehci_atmel_driver
+#endif
+
+#ifdef CONFIG_MIPS_SEAD3
+#include "ehci-mips.c"
+#define	PLATFORM_DRIVER		ehci_hcd_mips_driver
 #endif
 
 #if !defined(PCI_DRIVER) && !defined(PLATFORM_DRIVER) && \

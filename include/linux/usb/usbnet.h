@@ -33,6 +33,7 @@ struct usbnet {
 	wait_queue_head_t	*wait;
 	struct mutex		phy_mutex;
 	unsigned char		suspend_count;
+	unsigned char		pkt_cnt, pkt_err;
 
 	/* i/o info: pipes etc */
 	unsigned		in, out;
@@ -68,6 +69,9 @@ struct usbnet {
 #		define EVENT_RX_PAUSED	5
 #		define EVENT_DEV_WAKING 6
 #		define EVENT_DEV_ASLEEP 7
+#		define EVENT_DEV_OPEN	8
+#		define EVENT_RX_KILL	10
+#		define EVENT_SET_RX_MODE	12
 };
 
 static inline struct usb_driver *driver_of(struct usb_interface *intf)
@@ -96,6 +100,16 @@ struct driver_info {
 #define FLAG_WWAN	0x0400		/* use "wwan%d" names */
 
 #define FLAG_LINK_INTR	0x0800		/* updates link (carrier) status */
+
+#define FLAG_POINTTOPOINT 0x1000	/* possibly use "usb%d" names */
+
+/*
+ * Indicates to usbnet, that USB driver accumulates multiple IP packets.
+ * Affects statistic (counters) and short packet handling.
+ */
+#define FLAG_MULTI_PACKET	0x2000
+//#define FLAG_RX_ASSEMBLE	0x4000	/* rx packets may span >1 frames */
+#define FLAG_NOARP		0x8000	/* device can't do ARP */
 
 	/* init device ... can sleep, or cause probe() failure */
 	int	(*bind)(struct usbnet *, struct usb_interface *);
@@ -136,6 +150,9 @@ struct driver_info {
 	/* called by minidriver when receiving indication */
 	void	(*indication)(struct usbnet *dev, void *ind, int indlen);
 
+	/* rx mode change (device changes address list filtering) */
+	void	(*set_rx_mode)(struct usbnet *dev);
+
 	/* for new devices, use the descriptor-reading code instead */
 	int		in;		/* rx endpoint */
 	int		out;		/* tx endpoint */
@@ -166,7 +183,10 @@ struct cdc_state {
 };
 
 extern int usbnet_generic_cdc_bind(struct usbnet *, struct usb_interface *);
+extern int usbnet_ether_cdc_bind(struct usbnet *dev, struct usb_interface *intf);
+extern int usbnet_cdc_bind(struct usbnet *, struct usb_interface *);
 extern void usbnet_cdc_unbind(struct usbnet *, struct usb_interface *);
+extern void usbnet_cdc_status(struct usbnet *, struct urb *);
 
 /* CDC and RNDIS support the same host-chosen packet filters for IN transfers */
 #define	DEFAULT_FILTER	(USB_CDC_PACKET_TYPE_BROADCAST \
@@ -179,7 +199,8 @@ extern void usbnet_cdc_unbind(struct usbnet *, struct usb_interface *);
 enum skb_state {
 	illegal = 0,
 	tx_start, tx_done,
-	rx_start, rx_done, rx_cleanup
+	rx_start, rx_done, rx_cleanup,
+	unlink_start
 };
 
 struct skb_data {	/* skb->cb is one of these */
@@ -191,8 +212,7 @@ struct skb_data {	/* skb->cb is one of these */
 
 extern int usbnet_open(struct net_device *net);
 extern int usbnet_stop(struct net_device *net);
-extern netdev_tx_t usbnet_start_xmit(struct sk_buff *skb,
-				     struct net_device *net);
+extern netdev_tx_t usbnet_start_xmit(struct sk_buff *skb, struct net_device *net);
 extern void usbnet_tx_timeout(struct net_device *net);
 extern int usbnet_change_mtu(struct net_device *net, int new_mtu);
 

@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  * xHCI host controller driver
  *
@@ -36,6 +37,11 @@
 static int link_quirk;
 module_param(link_quirk, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(link_quirk, "Don't clear the chain bit on a link TRB");
+
+/* a workaround for Seagate or WD USB 3.0 HDD */
+int usb2mode;
+module_param(usb2mode, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(usb2mode, "set this to enable USB2");
 
 /* TODO: copied from ehci-hcd.c - can this be refactored? */
 /*
@@ -106,6 +112,64 @@ int xhci_halt(struct xhci_hcd *xhci)
 			STS_HALT, STS_HALT, XHCI_MAX_HALT_USEC);
 }
 
+#ifdef CONFIG_BCM47XX
+int xhci_fake_doorbell(struct xhci_hcd *xhci, int slot_id)
+{
+	unsigned int temp1, ret;
+
+	/* alloc a virt device for slot */
+	if (!xhci_alloc_virt_device(xhci, slot_id, 0, GFP_NOIO)) {
+                xhci_warn(xhci, "Could not allocate xHCI USB device data structures\n");
+		return 1;
+        }
+
+	/* ring fake doorbell for slot_id ep 0 */
+	xhci_ring_ep_doorbell(xhci, slot_id, 0, 0);
+	mdelay(1);
+
+	/* read the status register to check if HSE is set or not? */
+        temp1 = xhci_readl(xhci, &xhci->op_regs->status);
+	xhci_dbg(xhci, "op reg status = %x\n",temp1);
+
+	/* clear HSE if set */
+	if(temp1 & STS_FATAL) {
+		xhci_dbg(xhci, "HSE problem detected\n");
+		temp1 &= ~(0x1fff);
+		temp1 |= STS_FATAL;
+		xhci_dbg(xhci, "temp1=%x\n",temp1);
+		xhci_writel(xhci, temp1, &xhci->op_regs->status);
+		mdelay(1);
+	        temp1 = xhci_readl(xhci, &xhci->op_regs->status);
+        	xhci_dbg(xhci, "After clear op reg status=%x\n", temp1);
+	}
+	
+	/* Free virt device */
+	xhci_free_virt_device(xhci, slot_id);
+
+	/* Run the controller if needed */
+	temp1 = xhci_readl(xhci, &xhci->op_regs->command);
+	if (temp1 & CMD_RUN)
+		return 0;
+	temp1 |= (CMD_RUN);
+
+	xhci_writel(xhci, temp1, &xhci->op_regs->command);
+	/*
+	 * Wait for the HCHalted Status bit to be 0 to indicate the host is running.
+	 */
+	ret = handshake(xhci, &xhci->op_regs->status,
+		STS_HALT, 0, XHCI_MAX_HALT_USEC);
+
+	if (ret == -ETIMEDOUT) {
+		xhci_err(xhci, "Host took too long to start, "
+				"waited %u microseconds.\n",
+				XHCI_MAX_HALT_USEC);
+		return 1;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_BCM47XX */
+
 /*
  * Set the run bit and wait for the host to be running.
  */
@@ -130,6 +194,11 @@ int xhci_start(struct xhci_hcd *xhci)
 		xhci_err(xhci, "Host took too long to start, "
 				"waited %u microseconds.\n",
 				XHCI_MAX_HALT_USEC);
+
+#ifdef CONFIG_BCM47XX
+	xhci_fake_doorbell(xhci, 1);
+#endif /* CONFIG_BCM47XX */
+
 	return ret;
 }
 

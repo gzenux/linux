@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  * mm/percpu.c - percpu memory allocator
  *
@@ -1232,7 +1233,7 @@ static void pcpu_dump_alloc_info(const char *lvl,
 				 const struct pcpu_alloc_info *ai)
 {
 	int group_width = 1, cpu_width = 1, width;
-	char empty_str[] = "--------";
+	char * empty_str = "--------";
 	int alloc = 0, alloc_end = 0;
 	int group, v;
 	int upa, apl;	/* units per alloc, allocs per line */

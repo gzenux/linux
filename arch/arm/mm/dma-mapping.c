@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  *  linux/arch/arm/mm/dma-mapping.c
  *
@@ -23,6 +24,9 @@
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/sizes.h>
+
+#include <typedefs.h>
+#include <bcmdefs.h>
 
 static u64 get_coherent_dma_mask(struct device *dev)
 {
@@ -224,6 +228,7 @@ __dma_alloc_remap(struct page *page, size_t size, gfp_t gfp, pgprot_t prot)
 			pte++;
 			off++;
 			if (off >= PTRS_PER_PTE) {
+				BUG_ON(idx >= (NUM_CONSISTENT_PTES-1));
 				off = 0;
 				pte = consistent_pte[++idx];
 			}
@@ -270,6 +275,7 @@ static void __dma_free_remap(void *cpu_addr, size_t size)
 		addr += PAGE_SIZE;
 		off++;
 		if (off >= PTRS_PER_PTE) {
+			BUG_ON(idx >= (NUM_CONSISTENT_PTES-1));
 			off = 0;
 			ptep = consistent_pte[++idx];
 		}
@@ -495,7 +501,7 @@ static void dma_cache_maint_page(struct page *page, unsigned long offset,
 	} while (left);
 }
 
-void ___dma_page_cpu_to_dev(struct page *page, unsigned long off,
+void BCMFASTPATH_HOST ___dma_page_cpu_to_dev(struct page *page, unsigned long off,
 	size_t size, enum dma_data_direction dir)
 {
 	unsigned long paddr;
@@ -523,6 +529,14 @@ void ___dma_page_dev_to_cpu(struct page *page, unsigned long off,
 		outer_inv_range(paddr, paddr + size);
 
 	dma_cache_maint_page(page, off, size, dir, dmac_unmap_area);
+#ifdef CONFIG_BCM47XX
+	/*
+	 * Merged from Linux-2.6.37
+	 * Mark the D-cache clean for this page to avoid extra flushing.
+	 */
+	if (dir != DMA_TO_DEVICE && off == 0 && size >= PAGE_SIZE)
+		set_bit(PG_dcache_clean, &page->flags);
+#endif /* CONFIG_BCM47XX */
 }
 EXPORT_SYMBOL(___dma_page_dev_to_cpu);
 
@@ -542,15 +556,14 @@ EXPORT_SYMBOL(___dma_page_dev_to_cpu);
  * Device ownership issues as mentioned for dma_map_single are the same
  * here.
  */
-int dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
+int BCMFASTPATH_HOST dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 		enum dma_data_direction dir)
 {
 	struct scatterlist *s;
 	int i, j;
 
 	for_each_sg(sg, s, nents, i) {
-		s->dma_address = dma_map_page(dev, sg_page(s), s->offset,
-						s->length, dir);
+		s->dma_address = dma_map_page(dev, sg_page(s), s->offset, s->length, dir);
 		if (dma_mapping_error(dev, s->dma_address))
 			goto bad_mapping;
 	}

@@ -359,6 +359,23 @@ KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
 
+# Broadcom source tree
+KBUILD_CFLAGS += -I$(SRCBASE)/include
+KBUILD_CFLAGS += -I$(SRCBASE)/common/include
+KBUILD_CFLAGS += $(WLAN_ComponentIncPath)
+KBUILD_CFLAGS += $(WLAN_StdIncPathA)
+KBUILD_AFLAGS += -I$(SRCBASE)/include
+KBUILD_AFLAGS += -I$(SRCBASE)/common/include
+KBUILD_CFLAGS += -DBCMDRIVER -Dlinux
+
+# Bcm dbg flag
+#KBUILD_CFLAGS += -DBCMDBG
+
+ifeq ($(FEM_PATCH),y)
+KBUILD_CFLAGS += -DSKY85710_FEM_PATCH
+endif
+
+
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
 KERNELRELEASE = $(shell cat include/config/kernel.release 2> /dev/null)
 KERNELVERSION = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
@@ -534,10 +551,49 @@ endif # $(dot-config)
 # Defaults to vmlinux, but the arch makefile usually adds further targets
 all: vmlinux
 
+# Broadcom features compile options
+ifneq ($(CONFIG_BCM_CTF),)
+KBUILD_CFLAGS += -DHNDCTF -DCTFPOOL -DCTFMAP -DPKTC -DCTF_PPPOE -DCTF_PPTP -DCTF_L2TP
+ifneq ($(CONFIG_WL_USBAP),)
+KBUILD_CFLAGS += -DCTFPOOL_SPINLOCK
+endif
+ifneq ($(CONFIG_IPV6),)
+KBUILD_CFLAGS += -DCTF_IPV6
+endif
+endif
+
+ifneq ($(CONFIG_BCM_FA),)
+KBUILD_CFLAGS += -DBCMFA
+endif
+
+ifneq ($(CONFIG_RGMII_BCM_FA),)
+KBUILD_CFLAGS += -DRGMII_BCM_FA
+endif
+
+ifneq ($(CONFIG_BCM47XX),)
+KBUILD_CFLAGS += -DBCM47XX
+endif
+
+KBUILD_CFLAGS += -DWLMSG_ASSOC -DBCMDBG_ERR
+
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
 KBUILD_CFLAGS	+= -O2
+endif
+
+ifeq ($(CONFIG_LINUX_MTD),32)
+KBUILD_CFLAGS += -D"CONFIG_LINUX_MTD=32"
+endif
+ifeq ($(CONFIG_LINUX_MTD),64)
+KBUILD_CFLAGS += -D"CONFIG_LINUX_MTD=64"
+endif
+ifeq ($(CONFIG_LINUX_MTD),128)
+KBUILD_CFLAGS += -D"CONFIG_LINUX_MTD=128"
+endif
+
+ifeq ($(CONFIG_DUAL_TRX),y)
+KBUILD_CFLAGS += -DCONFIG_DUAL_TRX
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
@@ -554,7 +610,11 @@ endif
 ifdef CONFIG_FRAME_POINTER
 KBUILD_CFLAGS	+= -fno-omit-frame-pointer -fno-optimize-sibling-calls
 else
+ifeq ($(CONFIG_BUZZZ_FUNC),y)
+KBUILD_CFLAGS   += -fno-omit-frame-pointer
+else
 KBUILD_CFLAGS	+= -fomit-frame-pointer
+endif # CONFIG_BUZZZ_FUNC
 endif
 
 ifdef CONFIG_DEBUG_INFO
@@ -568,6 +628,12 @@ endif
 
 ifdef CONFIG_FUNCTION_TRACER
 KBUILD_CFLAGS	+= -pg
+endif
+
+ifeq ($(CONFIG_ELF_CORE),y)
+KBUILD_CFLAGS	+= -DDEBUG
+KBUILD_CFLAGS	+= -g
+KBUILD_AFLAGS	+= -gdwarf-2
 endif
 
 # We trigger additional mismatches with less inlining
@@ -646,6 +712,9 @@ export MODLIB
 #  the default option --strip-debug will be used.  Otherwise,
 #  INSTALL_MOD_STRIP will used as the options to the strip command.
 
+ifeq ($(CONFIG_BUZZZ_FUNC),y)
+mod_strip_cmd = $(STRIP) --strip-debug
+else
 ifdef INSTALL_MOD_STRIP
 ifeq ($(INSTALL_MOD_STRIP),1)
 mod_strip_cmd = $(STRIP) --strip-debug
@@ -655,6 +724,7 @@ endif # INSTALL_MOD_STRIP=1
 else
 mod_strip_cmd = true
 endif # INSTALL_MOD_STRIP
+endif # CONFIG_BUZZZ_FUNC
 export mod_strip_cmd
 
 

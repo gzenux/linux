@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  *  linux/drivers/char/core.c
  *
@@ -1873,6 +1874,13 @@ static const struct baud_rates baud_rates[] = {
 	{   4800, B4800   },
 	{   2400, B2400   },
 	{   1200, B1200   },
+	{    600, B600    },
+	{    300, B300    },
+	{    200, B200    },
+	{    150, B150    },
+	{    110, B110    },
+	{     75, B75     },
+	{     50, B50     },
 	{      0, B38400  }
 };
 

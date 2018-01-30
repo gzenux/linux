@@ -74,6 +74,12 @@
 #include "cdc-acm.h"
 
 
+#define CATHY_CONT_SCH_INT_EP
+
+#ifdef CATHY_CONT_SCH_INT_EP
+static int submit_ctrlurb[ACM_TTY_MINORS];
+#endif /* CATHY_CONT_SCH_INT_EP */
+
 #define ACM_CLOSE_TIMEOUT	15	/* seconds to let writes drain */
 
 /*
@@ -338,9 +344,18 @@ static void acm_ctrl_irq(struct urb *urb)
 exit:
 	usb_mark_last_busy(acm->dev);
 	retval = usb_submit_urb(urb, GFP_ATOMIC);
+
+#ifdef CATHY_CONT_SCH_INT_EP
+	if (retval) {
+		submit_ctrlurb[acm->minor] = 0; 
+		dev_err(&urb->dev->dev, "%s - usb_submit_urb failed with "
+			"result %d", __func__, retval);	
+	}
+#else /* ! CATHY_CONT_SCH_INT_EP */
 	if (retval)
 		dev_err(&urb->dev->dev, "%s - usb_submit_urb failed with "
 			"result %d", __func__, retval);
+#endif /* ! CATHY_CONT_SCH_INT_EP */
 }
 
 /* data interface returns incoming bytes, or we got unthrottled */
@@ -574,11 +589,21 @@ static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 	}
 
 	acm->ctrlurb->dev = acm->dev;
+
+#ifdef CATHY_CONT_SCH_INT_EP
+	if (submit_ctrlurb[acm->minor] == 0) {
+		submit_ctrlurb[acm->minor] = 1;
+		if (usb_submit_urb(acm->ctrlurb, GFP_KERNEL)) {
+			dbg("usb_submit_urb(ctrl irq) failed\n");
+			goto bail_out;
+		}
+	}
+#else /* ! CATHY_CONT_SCH_INT_EP */
 	if (usb_submit_urb(acm->ctrlurb, GFP_KERNEL)) {
-		dbg("usb_submit_urb(ctrl irq) failed");
+		dbg("usb_submit_urb(ctrl irq) failed\n");
 		goto bail_out;
 	}
-
+#endif /* ! CATHY_CONT_SCH_INT_EP */
 	if (0 > acm_set_control(acm, acm->ctrlout = ACM_CTRL_DTR | ACM_CTRL_RTS) &&
 	    (acm->ctrl_caps & USB_CDC_CAP_LINE))
 		goto full_bailout;
@@ -606,6 +631,9 @@ out:
 	return rv;
 
 full_bailout:
+#ifdef CATHY_CONT_SCH_INT_EP
+	submit_ctrlurb[acm->minor] = 0;
+#endif /* CATHY_CONT_SCH_INT_EP */
 	usb_kill_urb(acm->ctrlurb);
 bail_out:
 	acm->port.count--;
@@ -625,6 +653,9 @@ static void acm_tty_unregister(struct acm *acm)
 	tty_unregister_device(acm_tty_driver, acm->minor);
 	usb_put_intf(acm->control);
 	acm_table[acm->minor] = NULL;
+#ifdef CATHY_CONT_SCH_INT_EP
+	submit_ctrlurb[acm->minor] = 0;
+#endif /* CATHY_CONT_SCH_INT_EP */
 	usb_free_urb(acm->ctrlurb);
 	for (i = 0; i < ACM_NW; i++)
 		usb_free_urb(acm->wb[i].urb);
@@ -643,7 +674,9 @@ static void acm_port_down(struct acm *acm)
 	if (acm->dev) {
 		usb_autopm_get_interface(acm->control);
 		acm_set_control(acm, acm->ctrlout = 0);
+#ifndef CATHY_CONT_SCH_INT_EP
 		usb_kill_urb(acm->ctrlurb);
+#endif /* ! CATHY_CONT_SCH_INT_EP */
 		for (i = 0; i < ACM_NW; i++)
 			usb_kill_urb(acm->wb[i].urb);
 		for (i = 0; i < nr; i++)
@@ -1289,6 +1322,9 @@ skip_countries:
 	tty_register_device(acm_tty_driver, minor, &control_interface->dev);
 
 	acm_table[minor] = acm;
+#ifdef CATHY_CONT_SCH_INT_EP
+	submit_ctrlurb[minor] = 0;
+#endif /* CATHY_CONT_SCH_INT_EP */
 
 	return 0;
 alloc_fail8:
@@ -1316,6 +1352,9 @@ static void stop_data_traffic(struct acm *acm)
 	dbg("Entering stop_data_traffic");
 
 	tasklet_disable(&acm->urb_task);
+#ifdef CATHY_CONT_SCH_INT_EP
+	submit_ctrlurb[acm->minor] = 0;
+#endif /* CATHY_CONT_SCH_INT_EP */
 
 	usb_kill_urb(acm->ctrlurb);
 	for (i = 0; i < ACM_NW; i++)

@@ -1,3 +1,4 @@
+/* Modified by Broadcom Corp. Portions Copyright (c) Broadcom Corp, 2012. */
 /*
  * xHCI host controller driver
  *
@@ -269,6 +270,15 @@ struct xhci_op_regs {
  * A read gives the current link PM state of the port,
  * a write with Link State Write Strobe set sets the link state.
  */
+/* Port Link State - bits 5:8
+ * A read gives the current link PM state of the port,
+ * a write with Link State Write Strobe set sets the link state.
+ */
+#define PORT_PLS_MASK	(0xf << 5)
+#define XDEV_U0		(0x0 << 5)
+#define XDEV_U3		(0x3 << 5)
+#define XDEV_RESUME	(0xf << 5)
+
 /* true: port has power (see HCC_PPC) */
 #define PORT_POWER	(1 << 9)
 /* bits 10:13 indicate device speed:
@@ -942,6 +952,10 @@ struct xhci_event_cmd {
 /* Control transfer TRB specific fields */
 #define TRB_DIR_IN		(1<<16)
 
+#define	TRB_TX_TYPE(p)		((p)<<16)
+#define	TRB_DATA_OUT		2
+#define	TRB_DATA_IN		3
+
 /* Isochronous TRB specific fields */
 #define TRB_SIA			(1<<31)
 
@@ -1040,14 +1054,24 @@ union xhci_trb {
  * since the command ring is 64-byte aligned.
  * It must also be greater than 16.
  */
+#ifdef CONFIG_BCM47XX
+#define TRBS_PER_SEGMENT	256
+#else
 #define TRBS_PER_SEGMENT	64
+#endif
+
 /* Allow two commands + a link TRB, along with any reserved command TRBs */
 #define MAX_RSVD_CMD_TRBS	(TRBS_PER_SEGMENT - 3)
 #define SEGMENT_SIZE		(TRBS_PER_SEGMENT*16)
 /* SEGMENT_SHIFT should be log2(SEGMENT_SIZE).
  * Change this if you change TRBS_PER_SEGMENT!
  */
+#ifdef CONFIG_BCM47XX
+#define SEGMENT_SHIFT		12
+#else
 #define SEGMENT_SHIFT		10
+#endif
+
 /* TRB buffer pointers can't cross 64KB boundaries */
 #define TRB_MAX_BUFF_SHIFT		16
 #define TRB_MAX_BUFF_SIZE	(1 << TRB_MAX_BUFF_SHIFT)
@@ -1468,6 +1492,11 @@ void xhci_queue_config_ep_quirk(struct xhci_hcd *xhci,
 		unsigned int slot_id, unsigned int ep_index,
 		struct xhci_dequeue_state *deq_state);
 void xhci_stop_endpoint_command_watchdog(unsigned long arg);
+
+#ifdef CONFIG_BCM47XX
+void xhci_ring_ep_doorbell(struct xhci_hcd *xhci, unsigned int slot_id,
+		unsigned int ep_index, unsigned int stream_id);
+#endif /* CONFIG_BCM47XX */
 
 /* xHCI roothub code */
 int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue, u16 wIndex,
