@@ -16,6 +16,7 @@
 *.s
 *.ko
 *.so
+*.cmd
 *.so.dbg
 *.mod.c
 *.i
@@ -38,11 +39,12 @@ modules.builtin
 /tags
 /TAGS
 /linux
-/vmlinux
 /vmlinuz
 /System.map
 /Module.markers
 /Module.symvers
+vmlinux
+piggy.gzip
 
 #
 # git files that we don't want to ignore even it they are dot-files
@@ -77,3 +79,7 @@ GTAGS
 *.orig
 *~
 \#*#
+config_
+config_current
+config_rt*
+save-config
