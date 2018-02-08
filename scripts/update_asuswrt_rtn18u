@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Copy source and prebuilt binary blobs from new GPL to development repo
+
+# Note: this script is only for RT-N18U model used!
+# Usage: enter the new GPL directory then run this script.
+#        Then run by specifying the model number as argument.
+#        REPO will contain the location of your local repository
+
+REPO=$(dirname $(dirname "$0"))
+SRCBASE="release/src-rt-6.x.4708"
+DRVNET=$REPO/drivers/net
+BCMSRC=$REPO/broadcom
+BCMSRC_PRECOPY_CLEAN="common et include shared wl"
+
+# cleanup before copy action
+for i in $BCMSRC_PRECOPY_CLEAN
+do
+	rm -rf $BCMSRC/$i/* && mkdir -p $BCMSRC/$i
+done
+
+# basic full folders
+cp -af  $SRCBASE/{common,et,include,shared}      $BCMSRC/
+
+# ctf/emf/igs
+cp -f   $SRCBASE/router/ctf_arm/bcm6/ctf.o       $DRVNET/ctf/ctf_arm.obj
+cp -f   $SRCBASE/router/ctf_arm/bcm6_up/ctf.o    $DRVNET/ctf/ctf_arm_up.obj
+cp -f   $SRCBASE/router/emf_arm/emf.o            $DRVNET/emf/emf_arm.obj
+cp -f   $SRCBASE/router/emf_arm/igs.o            $DRVNET/igs/igs_arm.obj
+
+# wl/wl_hnd
+mkdir -p $BCMSRC/wl/config
+cp -f   $SRCBASE/wl/config/{wl.mk,wl_hnd,wlconfig_lx_shared}    $BCMSRC/wl/config/
+cp -f   $SRCBASE/router/wl_arm/prebuilt/wl_apsta.o              $DRVNET/wl/wl_apsta_arm.obj
+
+# post-copy action
+rm -rf $BCMSRC/shared/zlib
