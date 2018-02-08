@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Copy source and prebuilt binary blobs from new GPL to development repo
+
+# Note: this script is only for RT-N18U model used!
+# Usage: enter the new GPL directory and then run this script.
+#        REPO will contain the location of your local repository
+
+REPO=$(dirname $(dirname "$0"))
+MODEL=RT-N18U
+SRCBASE="release/src-rt-6.x.4708"
+BCMSRC=$REPO/brcm/arm
+BCMSRC_PRECOPY_CLEAN="bcm57xx bcmcrypto ctf emf et include makefiles proxyarp shared tools wl"
+
+# cleanup before copy action
+for i in $BCMSRC_PRECOPY_CLEAN
+do
+	rm -rf $BCMSRC/$i/* && mkdir -p $BCMSRC/$i
+done
+
+# basic full folders
+cp -af  $SRCBASE/{bcm57xx,bcmcrypto,et,include,makefiles,proxyarp,shared,tools}      $BCMSRC/
+cp -af  $SRCBASE/common/include/proto                                                $BCMSRC/include
+
+# ctf/emf/igs
+cp -af  $SRCBASE/router/ctf_arm/{bcm6,bcm6_up}                  $BCMSRC/ctf/
+cp -af  $SRCBASE/router/emf_arm/*                               $BCMSRC/emf/
+
+# wl/wl_hnd
+cp -af  $SRCBASE/wl                                             $BCMSRC/
+rm -rf  $BCMSRC/wl/{linux,sysdeps}
+mkdir -p $BCMSRC/wl/{sysdeps,prebuilt/$MODEL}
+ln -sf  prebuilt/RT-N18U                                        $BCMSRC/wl/linux
+cp -af  $SRCBASE/wl/sysdeps/{default,$MODEL}                    $BCMSRC/wl/sysdeps/
+cp -f   $SRCBASE/router/wl_arm/prebuilt/*                       $BCMSRC/wl/prebuilt/$MODEL/ >/dev/null 2>&1 ||
+	cp -f   $SRCBASE/router/wl_arm/prebuilt/$MODEL/*            $BCMSRC/wl/prebuilt/$MODEL/
+
+# post-copy action
+rm -rf  $BCMSRC/shared/zlib
