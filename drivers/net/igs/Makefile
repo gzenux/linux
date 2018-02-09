@@ -18,37 +18,5 @@
 # $Id: Makefile,v 1.3 2008-08-13 20:20:16 $
 #
 
-IGSSRCDIR := ../../../../../../src-rt-6.x.4708/router/emf${BCMEX}/igs
-IGSCSRCDIR := ../../../../../../src-rt-6.x.4708/emf/igs
-EMFDIR := ../../../../../../src-rt-6.x.4708/router/emf${BCMEX}
-
-IGS_OBJS := $(IGSCSRCDIR)/igsc.o $(IGSCSRCDIR)/igsc_sdb.o $(IGSSRCDIR)/igs_linux.o \
-	    $(IGSCSRCDIR)/osl_linux.o
-
-# Search for sources under src/router/emf/igs
-ifneq ($(wildcard $(src)/$(IGSSRCDIR)),)
-	EXTRA_CFLAGS += -I$(SRCBASE)/router/emf${BCMEX}/igs -I$(SRCBASE)/router/emf${BCMEX}/emf
-	EXTRA_CFLAGS += -I$(SRCBASE)/include/emf/igs -I$(SRCBASE)/include/emf/emf
-	igs-objs := $(IGS_OBJS)
-else
-	igs-objs := $(EMFDIR)/igs.o
-endif
-
+igs-objs := igs_$(ARCH).obj
 obj-$(CONFIG_EMF) := igs.o
-
-ifeq ($(CONFIG_BUZZZ_FUNC),y)
-subdir-ccflags-y += -O0 -fno-inline -finstrument-functions
-endif # CONFIG_BUZZZ_FUNC
-
-ifneq ($(KERNELRELEASE),)
-# kbuild part of makefile
-else
-# Normal makefile
-KERNELDIR := $(BASEDIR)/components/opensource/linux/linux-2.6.36
-all:
-	$(MAKE) -C $(KERNELDIR) M=`pwd`
-clean:
-	$(MAKE) -C $(KERNELDIR) M=`pwd` clean
-endif
-
-clean-files += $(IGSCSRCDIR)/*.o $(IGSSRCDIR)/*.o $(IGSCSRCDIR)/.*.o.cmd $(IGSSRCDIR)/.*.o.cmd

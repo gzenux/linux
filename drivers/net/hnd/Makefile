@@ -18,12 +18,12 @@
 # $Id: Makefile,v 1.5 2008-05-02 22:49:54 $
 #
 
-SHARED   := ../../../../../../src-rt-6.x.4708/shared
-ROUTER   := ../../../../../../src-rt-6.x.4708/router
-SRC      := ../../../../../../src-rt-6.x.4708
+SHARED   := ../../../$(BCMSHARED)
+#ROUTER   := ../../../../../../src-rt-6.x.4708/router
+#SRC      := ../../../../../../src-rt-6.x.4708
 WLSHARED := wlconfig_lx_shared
-WLCFGDIR := $(src)/../../../../../../src-rt-6.x.4708/wl/config
-WLSYSDIR := $(src)/../../../../../../src-rt-6.x.4708/wl/sys
+WLCFGDIR := $(src)/../../../$(BCMDIR)/wl/config
+WLSYSDIR := $(src)/../../../$(BCMDIR)/wl/sys
 
 ifeq ($(CONFIG_BUZZZ_FUNC),y)
 subdir-ccflags-y += -O0 -fno-inline -finstrument-functions
@@ -38,6 +38,7 @@ hnd-objs := $(addprefix $(SHARED)/, $(sort $(WLFILES:.c=.o)))
 HND_OBJS := $(addprefix $(src)/$(SHARED)/, $(sort $(WLFILES:.c=.o)))
 
 EXTRA_CFLAGS += $(WLFLAGS) -DBCM5354 -DLINUX_HYBRID_POSTPROCESSING_REMOVAL
+EXTRA_CFLAGS += -I$(src)/$(SHARED)/bcmwifi/include
 
 ifeq ($(CONFIG_RTAC87U),y)
 EXTRA_CFLAGS += -DRTAC87U

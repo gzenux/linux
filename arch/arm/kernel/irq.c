@@ -42,7 +42,6 @@
 #include <asm/mach/time.h>
 
 #include <typedefs.h>
-#include <bcmdefs.h>
 
 /*
  * No architecture-specific irq_finish function defined in arm/arch/irqs.h.

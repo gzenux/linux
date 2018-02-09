@@ -43,7 +43,6 @@
 #include <bcmdefs.h>
 #include <hndsoc.h>
 #include <siutils.h>
-#include <hndmips.h>
 #include <hndsflash.h>
 #ifdef CONFIG_MTD_NFLASH
 #include <nflash.h>

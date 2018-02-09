@@ -18,16 +18,6 @@
 # $Id: Makefile,v 1.13 2010-12-13 20:23:49 $
 #
 
-SRCBASE_OFFSET := ../../../../../../src-rt-6.x.4708
-
-TARGET := wl
-WLCONF_H := wlconf.h
-WLCONF_O := wlconf.o
-
-ifeq ($(CONFIG_BUZZZ_FUNC),y)
-subdir-ccflags-y += -O0 -fno-inline -finstrument-functions
-endif # CONFIG_BUZZZ_FUNC
-
 # Generate list of supported variants
 VLIST_BASE := AP STA APSTA
 ifeq ($(CONFIG_WL_USE_AP_SDSTD),y)
@@ -38,8 +28,7 @@ VLIST          += $(VLIST_BASE)
 
 ifeq ($(CONFIG_WL_USBAP),y)
 # Do variants because we need two drivers for dual band operation
-WL_VARIANTS	:= 1
-VLIST		+= HIGH
+  VLIST          += HIGH
 # Note that we don't use CONFIG_WL_USE_HIGH because we need to leave WL_SUFFIX for
 # the other driver. HIGH driver is always called wl_high and loaded upon hotplut
 # event.
@@ -57,14 +46,10 @@ CONFIG_WL_CONF := $(CONFIG_WL_$(WL_SUFFIX))
 wl_suffix := $(shell echo "$(WL_SUFFIX)" | tr A-Z a-z)
 
 
-# For PREBUILD and postbuild w/WLSRC, compile variants in subdirs
-# Subdir names use lowercase versions of the variant suffixes
-#wlsubdirs := $(addprefix wl_,$(foreach v,$(VLIST),$(shell echo "$(v)/" | tr A-Z a-z)))
-wlsubdirs := $(addprefix wl_,$(foreach v,$(VLIST),$(shell echo "$(v)" | tr A-Z a-z)))
+wl-objs := wl_$(wl_suffix)_$(ARCH).obj
+obj-$(CONFIG_WL) := wl.o
 
-
-#subdir-y += $(wlsubdirs)
-#subdir-m += $(wlsubdirs)
-
-.NOTPARALLEL:
-include $(src)/wl_generic.mk
+ifeq ($(CONFIG_WL_USBAP),y)
+  wl_high-objs := wl_high_$(ARCH).obj
+  obj-m += wl_high.o
+endif

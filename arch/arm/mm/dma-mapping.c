@@ -26,7 +26,6 @@
 #include <asm/sizes.h>
 
 #include <typedefs.h>
-#include <bcmdefs.h>
 
 static u64 get_coherent_dma_mask(struct device *dev)
 {

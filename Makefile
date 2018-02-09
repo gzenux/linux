@@ -360,12 +360,14 @@ KBUILD_CFLAGS_MODULE  := -DMODULE
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
 
 # Broadcom source tree
-KBUILD_CFLAGS += -I$(SRCBASE)/include
-KBUILD_CFLAGS += -I$(SRCBASE)/common/include
-KBUILD_CFLAGS += $(WLAN_ComponentIncPath)
-KBUILD_CFLAGS += $(WLAN_StdIncPathA)
-KBUILD_AFLAGS += -I$(SRCBASE)/include
-KBUILD_AFLAGS += -I$(SRCBASE)/common/include
+BCMDIR        := broadcom
+BCMSHARED     := $(BCMDIR)/shared
+BCMCOMMON     := $(BCMDIR)/common
+export BCMDIR BCMSHARED BCMCOMMON
+KBUILD_CFLAGS += -I$(srctree)/$(BCMDIR)/include
+KBUILD_CFLAGS += -I$(srctree)/$(BCMCOMMON)/include
+KBUILD_AFLAGS += -I$(srctree)/$(BCMDIR)/include
+KBUILD_AFLAGS += -I$(srctree)/$(BCMCOMMON)/include
 KBUILD_CFLAGS += -DBCMDRIVER -Dlinux
 
 # Bcm dbg flag

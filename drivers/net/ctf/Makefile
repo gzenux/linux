@@ -20,37 +20,8 @@
 
 obj-${CONFIG_BCM_CTF} := ctf.o
 
-CTFSRC := ../../../../../../src-rt-6.x.4708/router/ctf${BCMEX}/
-CTFOBJ := $(CTFSRC)/hndctf.o $(CTFSRC)/hndctf_linux.o
-SYMOBJ := $(CTFSRC)/hndctf.o
-
-ifeq ($(CONFIG_BUZZZ_FUNC),y)
-subdir-ccflags-y += -O0 -fno-inline -finstrument-functions
-endif # CONFIG_BUZZZ_FUNC
-
-# Search for sources under src/router/ctf
-ifneq (,$(wildcard $(src)/$(CTFSRC)/*.c))
-  EXTRA_CFLAGS += -I$(src)/$(CTFSRC)/../../router/ctf${BCMEX} -DHNDCTF
-  ctf-objs := $(CTFOBJ) ctf_ksyms.o
+ifeq ($(CONFIG_BROKEN_ON_SMP),y)
+ctf-objs := ctf_$(ARCH)_up.obj
 else
-  ctf-objs := $(CTFSRC)/linux/ctf.o
-endif
-
-ifeq (,${KERNELRELEASE})
-  # Normal makefile
-  KERNELDIR := $(BASEDIR)/components/opensource/linux/linux-2.6.36
-
-  .PHONY: all clean
-  all clean :
-	  +$(MAKE) -C $(KERNELDIR) M=`pwd` $@
-endif
-
-PHONY += $(src)/ctf_ksyms.c
-
-quiet_cmd_ksyms = CALL    $<
-      cmd_ksyms = $(CONFIG_SHELL) -e $< $(src)/$(SYMOBJ) > $@
-
-$(src)/ctf_ksyms.c: $(src)/ctf_ksyms.sh $(src)/$(SYMOBJ) FORCE
-	$(call cmd,ksyms)
-
-clean-files += $(CTFSRC)/*.o $(CTFSRC)/.*.o.cmd
+ctf-objs := ctf_$(ARCH).obj
+endif # CONFIG_BROKEN_ON_SMP
