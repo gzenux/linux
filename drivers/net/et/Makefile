@@ -18,7 +18,7 @@
 # $Id: Makefile,v 1.5 2010-12-07 04:47:36 $
 #
 
-ETSRCDIR := ../../../../../../src-rt-6.x.4708/et
+ETSRCDIR := ../../../$(BRCMDIR)/et
 
 et-objs := $(ETSRCDIR)/sys/et_linux.o $(ETSRCDIR)/sys/etc.o
 

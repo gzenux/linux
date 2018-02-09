@@ -1,4 +1,4 @@
-SHARED := ../../../../../../src-rt-6.x.4708/shared
+SHARED := ../../../$(BRCMSHARED)
 
 AFLAGS_plat-head.o        := -DTEXT_OFFSET=$(TEXT_OFFSET)
 

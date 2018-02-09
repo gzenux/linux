@@ -18,12 +18,14 @@
 # $Id: Makefile,v 1.5 2008-05-02 22:49:54 $
 #
 
-SHARED   := ../../../../../../src-rt-6.x.4708/shared
-ROUTER   := ../../../../../../src-rt-6.x.4708/router
-SRC      := ../../../../../../src-rt-6.x.4708
+EXTRA_CFLAGS+=-I$(srctree)/$(BRCMSHARED)/bcmwifi/include
+EXTRA_AFLAGS+=-I$(srctree)/$(BRCMSHARED)/bcmwifi/include
+SHARED   := ../../../$(BRCMSHARED)
+#ROUTER   := ../../../../../../src-rt-6.x.4708/router
+#SRC      := ../../../../../../src-rt-6.x.4708
 WLSHARED := wlconfig_lx_shared
-WLCFGDIR := $(src)/../../../../../../src-rt-6.x.4708/wl/config
-WLSYSDIR := $(src)/../../../../../../src-rt-6.x.4708/wl/sys
+WLCFGDIR := $(src)/../../../$(BRCMDIR)/wl/config
+WLSYSDIR := $(src)/../../../$(BRCMDIR)/wl/sys
 
 ifeq ($(CONFIG_BUZZZ_FUNC),y)
 subdir-ccflags-y += -O0 -fno-inline -finstrument-functions

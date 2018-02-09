@@ -18,9 +18,19 @@
 # $Id: Makefile,v 1.1 2009-10-27 01:27:44 $
 #
 
-obj-${CONFIG_BCM_CTF} := ctf.o
+obj-$(CONFIG_BCM_CTF) := ctf.o
 
-CTFSRC := ../../../../../../src-rt-6.x.4708/router/ctf${BCMEX}/
+ifeq ($(CONFIG_BCM47XX),y)
+ifeq ($(CONFIG_BROKEN_ON_SMP),y)
+CTFLINUXDIR=bcm6_up
+else
+CTFLINUXDIR=bcm6
+endif # CONFIG_BROKEN_ON_SMP
+else
+$(error currently not integrated support)
+endif # CONFIG_BCM47XX
+
+CTFSRC := ../../../$(BRCMDIR)/ctf/
 CTFOBJ := $(CTFSRC)/hndctf.o $(CTFSRC)/hndctf_linux.o
 SYMOBJ := $(CTFSRC)/hndctf.o
 
@@ -33,7 +43,7 @@ ifneq (,$(wildcard $(src)/$(CTFSRC)/*.c))
   EXTRA_CFLAGS += -I$(src)/$(CTFSRC)/../../router/ctf${BCMEX} -DHNDCTF
   ctf-objs := $(CTFOBJ) ctf_ksyms.o
 else
-  ctf-objs := $(CTFSRC)/linux/ctf.o
+  ctf-objs := $(CTFSRC)/$(CTFLINUXDIR)/ctf.o
 endif
 
 ifeq (,${KERNELRELEASE})
