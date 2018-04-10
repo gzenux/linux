@@ -8,6 +8,7 @@
 #        REPO will contain the location of your local repository
 
 REPO=$(dirname $(dirname "$0"))
+MODEL=RT-N18U
 SRCBASE="release/src-rt-6.x.4708"
 DRVNET=$REPO/drivers/net
 BCMSRC=$REPO/broadcom
@@ -31,7 +32,8 @@ cp -f   $SRCBASE/router/emf_arm/igs.o            $DRVNET/igs/igs_arm.obj
 # wl/wl_hnd
 mkdir -p $BCMSRC/wl/config
 cp -f   $SRCBASE/wl/config/{wl.mk,wl_hnd,wlconfig_lx_shared}    $BCMSRC/wl/config/
-cp -f   $SRCBASE/router/wl_arm/prebuilt/wl_apsta.o              $DRVNET/wl/wl_apsta_arm.obj
+cp -f   $SRCBASE/router/wl_arm/prebuilt/wl_apsta.o              $DRVNET/wl/wl_apsta_arm.obj >/dev/null 2>&1 ||
+	cp -f   $SRCBASE/router/wl_arm/prebuilt/$MODEL/wl_apsta.o       $DRVNET/wl/wl_apsta_arm.obj
 
 # post-copy action
 rm -rf $BCMSRC/shared/zlib
